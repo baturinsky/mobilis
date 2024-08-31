@@ -1,0 +1,897 @@
+"use strict";
+(() => {
+  // src/geometry.ts
+  var SQUARE = 0;
+  var ODDR = 1;
+  var WIDTH2 = 2;
+  var AXIAL = 3;
+  var SQUARE8 = 4;
+  function createNeighborDeltas(columns, layout) {
+    let r;
+    switch (layout) {
+      case SQUARE:
+        r = [
+          [0, -1],
+          [1, 0],
+          [0, 1],
+          [-1, 0]
+        ].map(([dx, dy]) => dy * columns + dx);
+        return [r, r];
+      case SQUARE8:
+        r = [
+          [0, -1],
+          [1, -1],
+          [1, 0],
+          [1, 1],
+          [0, 1],
+          [-1, 1],
+          [-1, 0],
+          [-1, -1]
+        ].map(([dx, dy]) => dy * columns + dx);
+        return [r, r];
+      case ODDR:
+        return [
+          [
+            [0, -1],
+            [1, 0],
+            [0, 1],
+            [-1, 1],
+            [-1, 0],
+            [-1, -1]
+          ],
+          [
+            [1, -1],
+            [1, 0],
+            [1, 1],
+            [0, 1],
+            [-1, 0],
+            [0, -1]
+          ]
+        ].map((n) => n.map(([dx, dy]) => dy * columns + dx));
+      case WIDTH2:
+        r = [
+          [1, -1],
+          [2, 0],
+          [1, 1],
+          [-1, 1],
+          [-2, 0],
+          [-1, -1]
+        ].map(([dx, dy]) => dy * columns + dx);
+        return [r, r];
+      case AXIAL:
+        r = [
+          [0, -1],
+          [1, 0],
+          [1, 1],
+          [0, 1],
+          [-1, 0],
+          [-1, -1]
+        ].map(([dx, dy]) => dy * columns + dx);
+        return [r, r];
+    }
+  }
+
+  // src/worldgen.ts
+  function lerp(a, b, n) {
+    return a * (1 - n) + b * n;
+  }
+  function clamp(a, b, n) {
+    return n < a ? a : n > b ? b : n;
+  }
+  var randomSeed = 6;
+  function random() {
+    let x = Math.sin(randomSeed) * 1e4;
+    randomSeed = (randomSeed + Math.E) % 1e8;
+    return x - Math.floor(x);
+  }
+  function coord2ind([x, y], width) {
+    return Math.floor(x) + Math.floor(y * width);
+  }
+  function context2d(canvas) {
+    return canvas.getContext("2d");
+  }
+  function createCanvasCtx(width, height) {
+    let canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    let ctx = context2d(canvas);
+    return { canvas, ctx };
+  }
+  function image2alpha(canvas) {
+    let ctx = context2d(canvas);
+    let idata = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let data = idata.data;
+    let values = new Float32Array(data.length / 4);
+    for (let i = 0; i < data.length; i++) values[i] = data[i * 4 + 3] / 255;
+    return values;
+  }
+  function gradientNoise(width, height, points = 5e3, radius = 100, alpha = 0.01, gradientCircles = true) {
+    let { canvas, ctx } = createCanvasCtx(width, height);
+    if (gradientCircles) {
+      let g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      g.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
+      g.addColorStop(1, `rgba(255, 255, 255, 0)`);
+      ctx.fillStyle = g;
+    } else {
+      ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+    }
+    for (let i = 0; i < points; i++) {
+      let points2 = [...Array(3)].map(() => random());
+      let [x, y] = [points2[0] * width, points2[1] * height];
+      let r = Math.pow(points2[2], 2) * radius;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(random() * Math.PI);
+      ctx.scale(r * (0.5 + random()), r * (0.5 + random()));
+      ctx.beginPath();
+      ctx.arc(0, 0, 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    return canvas;
+  }
+  function addFilter(srcCanvas, filter) {
+    let { canvas, ctx } = createCanvasCtx(srcCanvas.width, srcCanvas.height);
+    ctx.filter = filter;
+    ctx.drawImage(srcCanvas, 0, 0);
+    return canvas;
+  }
+  function approximateQuantile(values, level = 0.5, picks = 1e3) {
+    if (!values)
+      debugger;
+    let l = values.length;
+    let picked = [...Array(picks)].map(() => values[Math.floor(random() * l)]);
+    picked = picked.sort();
+    return picked[Math.floor(level * picked.length)];
+  }
+  function normalizeValues(values, picks = 1e3) {
+    let l = values.length;
+    let picked = [...Array(picks)].map(() => values[Math.floor(random() * l)]);
+    let max = 0;
+    for (let v of picked) if (v > max) max = v;
+    return values.map((v) => v / max);
+  }
+  var gen = ({ width, height }, smoothness, points, radius, alpha) => image2alpha(addFilter(
+    gradientNoise(
+      width,
+      height,
+      points,
+      Math.sqrt(width * width + height * height) * radius,
+      alpha
+    ),
+    `blur(${smoothness}px)`
+  ));
+  function generateTerrain(params) {
+    let {
+      width,
+      height,
+      seed,
+      noiseSmoothness,
+      tectonicSmoothness,
+      noiseFactor,
+      crustFactor,
+      tectonicFactor,
+      pangaea
+    } = params;
+    randomSeed = seed;
+    const mapSize = width * height;
+    console.time("noise");
+    let noise = gen(params, noiseSmoothness, 3e3, 0.15, 0.03);
+    let crust = gen(params, tectonicSmoothness, 2e3, 0.15, 0.03);
+    let tectonicMul = gen(params, tectonicSmoothness, 2e3, 0.15, 0.03);
+    console.timeEnd("noise");
+    console.time("main");
+    let tectonicMedian = approximateQuantile(crust, 0.5);
+    let tectonic = crust.map(
+      (v, i) => {
+        let t = (0.2 / (Math.abs(tectonicMedian - v) + 0.1) - 0.95) * (tectonicMul[i] - 0.2) * 2;
+        let fold = t * (1 + Math.sin(t ** 2));
+        fold = 0.5 * (noise[i] ** 2 - 0.2) * fold ** 2;
+        t += fold;
+        return t;
+      }
+    );
+    let elevationFloats = crust.map(
+      (_, i) => 5 + noise[i] * noiseFactor + crust[i] * crustFactor + tectonic[i] * tectonicFactor + -pangaea * (Math.abs(i / mapSize - 0.5) + Math.abs(i % width / width - 0.5))
+    );
+    console.timeEnd("main");
+    console.time("normalize");
+    let dryElevation = normalizeValues(elevationFloats);
+    console.timeEnd("normalize");
+    return { dryElevation, tectonic };
+  }
+  function generateMap(params, terrain) {
+    terrain ??= generateTerrain(params);
+    let lm = generateAtmosphere(params, terrain);
+    return lm;
+  }
+  function generateAtmosphere(params, terrain) {
+    let {
+      width,
+      height,
+      averageTemperature,
+      biomeScrambling,
+      erosion,
+      riversShown,
+      randomiseHumidity,
+      generatePhoto,
+      shading,
+      noiseSmoothness,
+      seaRatio,
+      flatness,
+      noiseSeed,
+      elevationCold
+    } = params;
+    randomSeed = noiseSeed;
+    let noise = gen(params, noiseSmoothness, 3e3, 0.15, 0.01);
+    let { dryElevation, tectonic } = terrain;
+    const mapSize = width * height;
+    let seaLevel = approximateQuantile(dryElevation, seaRatio);
+    let elevation = dryElevation.map(
+      (v, i) => v < seaLevel ? -Math.pow(1 - v / seaLevel, 0.35) : Math.pow(
+        (v - seaLevel) * (0.5 + tectonic[i] * 0.5) / (1 - seaLevel),
+        1 + 2 * flatness
+      )
+    );
+    let rivers = generateRiversAndErosion({
+      width,
+      height,
+      elevation,
+      tectonic,
+      erosion,
+      riversShown
+    });
+    let wind = elevation.map(
+      (h, i) => Math.cos((Math.abs(0.5 - i / mapSize) * 4 + 0.85) * Math.PI) / (h < 0 ? 1 : 1 + 5 * h * h)
+    );
+    console.time("windSmoothing");
+    wind = image2alpha(
+      addFilter(
+        data2image(wind, width, (v) => [0, 0, 0, 127 * (v + 1)]),
+        "blur(3px)"
+      )
+    ).map((v) => v * 2 - 1);
+    console.timeEnd("windSmoothing");
+    let humidity = generateHumidity({ width, height, elevation, wind, steps: 400 });
+    if (randomiseHumidity) {
+      humidity = humidity.map(
+        (v, i) => Math.max(0, v + Math.sin(noise[i] * 50) / 10 - elevation[i] * 0.2)
+      );
+    }
+    let temperature = elevation.map(
+      (e, i) => averageTemperature + 25 - 100 * Math.abs(0.5 - i / mapSize) / (0.7 + 0.6 * humidity[i]) - Math.max(0, e) * elevationCold
+    );
+    console.time("biome");
+    let biome = temperature.map((t, i) => {
+      let scramble = 1 + biomeScrambling * Math.sin(noise[i] * 100);
+      let b = biomeTable[Math.floor(
+        Math.max(
+          0,
+          Math.min(
+            humidity[i] * 4.5 * scramble,
+            5
+          )
+        )
+      )][Math.floor(Math.max(0, Math.min(t * scramble / 10 + 1, 3)))] || 0;
+      if (b == TUNDRA && elevation[i] > 0.5) b = MOUNTAIN;
+      return b;
+    });
+    console.timeEnd("biome");
+    let folds = [...humidity], shades = [...humidity];
+    let photo;
+    if (generatePhoto) {
+      let lerpTo = function(b, n) {
+        for (let i of [0, 1, 2])
+          rgba[i] = lerp(rgba[i], b[i], n);
+      };
+      console.time("photo");
+      let rgba;
+      photo = [...humidity].map((hum, i) => {
+        let ele = elevation[i];
+        if (ele < 0) {
+          return [-(ele ** 2) * 1e3 + 100, -(ele ** 2) * 500 + 150, -(ele ** 2) * 300 + 150, 255];
+        } else {
+          rgba = [
+            Math.max(0, temperature[i] * 15 - hum * 1e3),
+            150 - hum * 100,
+            Math.max(0, temperature[i] * 8 - hum * 500),
+            255
+          ];
+          let et = (ele + tectonic[i]) * 2 - 1;
+          if (et > 0) {
+            lerpTo([64, 0, 0, 255], Math.min(1.5, et ** 2));
+          }
+          let fold = (1 + Math.sin(tectonic[i] * 30)) * (1 + random());
+          fold = (Math.sin(noise[i] * 100) + 0.5) * fold ** 2 * 0.1;
+          lerpTo([64, 64, 0], fold);
+          folds[i] = 0;
+          if (rivers[i]) {
+            return [0, 100, 150 + 100 * ele, 255];
+          }
+          for (let d of [1, width, -1, -width, 0]) {
+            lerpTo(biomeColors[biome[i + d]], 0.1);
+          }
+          if (ele > 0 && elevation[i + 1 + width * 1] < 0)
+            lerpTo([255, 255, 255, 255], 0.2);
+          if (ele > 0 && elevation[i - 1 - width * 1] < 0)
+            lerpTo([0, 0, 0, 255], 0.2);
+          if (temperature[i] < 0) {
+            rgba = [255, 255, 255, 255];
+          }
+          if (true) {
+            let shade = elevation[i + width + 1] * 2 - elevation[i - width - 1] - ele;
+            lerpTo([255, 255, 255], clamp(-0.2, 0.2, -shade * 3));
+            shades[i] = shade;
+          }
+          return rgba;
+        }
+      });
+      console.timeEnd("photo");
+    }
+    let layeredMap = {
+      tectonic,
+      dryElevation,
+      elevation,
+      noise,
+      rivers,
+      wind,
+      temperature,
+      humidity,
+      biome,
+      folds,
+      photo,
+      shades
+    };
+    return layeredMap;
+  }
+  function generateHumidity({ width, height, elevation, wind, steps }) {
+    console.time("humidity");
+    const mapDiagonal = Math.sqrt(width * width + height * height);
+    let border = width / 2;
+    let humidityImage = data2image(elevation, width, (v, i) => [
+      0,
+      0,
+      0,
+      v <= 0 ? 100 : 0
+    ]);
+    let wetness = createCanvasCtx(width + border * 2, height + border * 2);
+    wetness.ctx.beginPath();
+    wetness.ctx.rect(border / 2, border / 2, width + border, height + border);
+    wetness.ctx.lineWidth = border / 2;
+    wetness.ctx.stroke();
+    wetness.ctx.drawImage(humidityImage, width / 2, height / 2);
+    wetness.ctx.filter = "opacity(50%)";
+    const spotSize = mapDiagonal / 10;
+    for (let i = 0; i < steps; i++) {
+      let start = [i % 100 / 100 * width, i % 10 / 10 * height];
+      let windThere = wind[coord2ind(start, width)];
+      let end = [
+        start[0] + windThere * 0.3 * width / 8,
+        start[1] + Math.abs(windThere) * 0.5 * height / 12
+      ];
+      wetness.ctx.drawImage(
+        wetness.canvas,
+        start[0] + border,
+        start[1] + border,
+        spotSize,
+        spotSize,
+        end[0] + border,
+        end[1] + border,
+        spotSize,
+        spotSize
+      );
+    }
+    context2d(humidityImage).filter = "blur(10px)";
+    context2d(humidityImage).drawImage(
+      wetness.canvas,
+      border,
+      border,
+      width,
+      height,
+      0,
+      0,
+      width,
+      height
+    );
+    let humidity = image2alpha(humidityImage);
+    console.timeEnd("humidity");
+    return humidity;
+  }
+  function generateRiversAndErosion({
+    width,
+    height,
+    elevation,
+    humidity,
+    tectonic,
+    erosion,
+    riversShown
+  }) {
+    console.time("rivers");
+    let rivers = new Float32Array(width * height);
+    let neighbors = createNeighborDeltas(width, SQUARE8)[0];
+    for (let streamIndex = 0; streamIndex < erosion + riversShown; streamIndex++) {
+      let current = Math.floor(random() * width * height);
+      if (elevation[current] < random()) continue;
+      if (humidity && humidity[current] < random()) continue;
+      let limit = 1e4;
+      while (elevation[current] > -0.15 && limit-- > 0) {
+        if (streamIndex > erosion) {
+          rivers[current] += 1;
+        }
+        let currentElevation = elevation[current];
+        let lowestNeighbor = 0, lowestNeighborElevation = 100;
+        for (let neighborIndex = 0; neighborIndex < 8; neighborIndex++) {
+          let neighborDelta = neighbors[neighborIndex];
+          if (elevation[current + neighborDelta] <= lowestNeighborElevation) {
+            lowestNeighbor = current + neighborDelta;
+            lowestNeighborElevation = elevation[lowestNeighbor];
+          }
+        }
+        if (lowestNeighborElevation < currentElevation) {
+          elevation[current] -= (currentElevation - lowestNeighborElevation) / 5;
+        } else {
+          elevation[current] = lowestNeighborElevation + 0.02;
+        }
+        current = lowestNeighbor;
+      }
+    }
+    console.timeEnd("rivers");
+    return rivers;
+  }
+  var DESERT = 1;
+  var GRASSLAND = 2;
+  var TUNDRA = 3;
+  var SAVANNA = 4;
+  var SHRUBLAND = 5;
+  var TAIGA = 6;
+  var DENSE_FOREST = 7;
+  var TEMPERATE_FOREST = 8;
+  var RAIN_FOREST = 9;
+  var SWAMP = 10;
+  var SNOW = 11;
+  var STEPPE = 12;
+  var CONIFEROUS_FOREST = 13;
+  var MOUNTAIN = 14;
+  var BEACH = 15;
+  var biomeTable = [
+    [TUNDRA, STEPPE, SAVANNA, DESERT],
+    [TUNDRA, SHRUBLAND, GRASSLAND, GRASSLAND],
+    [SNOW, SHRUBLAND, GRASSLAND, TEMPERATE_FOREST],
+    [SNOW, CONIFEROUS_FOREST, TEMPERATE_FOREST, TEMPERATE_FOREST],
+    [TAIGA, CONIFEROUS_FOREST, DENSE_FOREST, DENSE_FOREST],
+    [TAIGA, CONIFEROUS_FOREST, DENSE_FOREST, RAIN_FOREST]
+  ];
+  var biomeNames = [
+    "unknown",
+    "desert",
+    "grassland",
+    "tundra",
+    "savanna",
+    "shrubland",
+    "taiga",
+    "tropical forest",
+    "decidious forest",
+    "rain forest",
+    "swamp",
+    "snow",
+    "steppe",
+    "coniferous forest",
+    "mountain shrubland",
+    "beach"
+  ];
+  function mapToList(m) {
+    let l = [];
+    for (let k in m) {
+      l[k] = m[k];
+    }
+    return l;
+  }
+  function colorFromRGB16String(color) {
+    let n = parseInt(color, 16);
+    let c = [Math.floor(n / 256) * 16, Math.floor(n / 16) % 16 * 16, n % 16 * 16, 256];
+    return c;
+  }
+  var biomeColors = mapToList({
+    [DESERT]: "ff0",
+    [GRASSLAND]: "8f8",
+    [TUNDRA]: "cca",
+    [SAVANNA]: "cc0",
+    [SHRUBLAND]: "ad4",
+    [TAIGA]: "064",
+    [DENSE_FOREST]: "080",
+    [TEMPERATE_FOREST]: "4a4",
+    [RAIN_FOREST]: "084",
+    [SWAMP]: "880",
+    [SNOW]: "fff",
+    [STEPPE]: "cfa",
+    [CONIFEROUS_FOREST]: "0a4",
+    [MOUNTAIN]: "844",
+    [BEACH]: "ffd"
+  }).map(colorFromRGB16String);
+  function data2image(values, width, converter, altitudes) {
+    let height = values.length / width;
+    let { canvas, ctx } = createCanvasCtx(width, height);
+    let idata = ctx.createImageData(width, height);
+    if (!idata.data || !values)
+      debugger;
+    for (let i = 0; i < values.length; i++) {
+      let h = 0;
+      let v = converter(values[i], i) ?? 0;
+      idata.data.set(v, i * 4);
+    }
+    ctx.putImageData(idata, 0, 0);
+    return canvas;
+  }
+  function elevation2Image({ elevation, rivers }, {
+    discreteHeights = 10,
+    terrainTypeColoring = false,
+    hillRatio = 0.1,
+    mountainRatio = 0.02,
+    green = true
+  }) {
+    let hillElevation = approximateQuantile(elevation, 1 - hillRatio);
+    let mountainElevation = approximateQuantile(elevation, 1 - mountainRatio);
+    return (v, i) => {
+      if (rivers[i] && v > 0) {
+        return [0, v * 400, 200, 255];
+      }
+      let level = discreteHeights ? Math.floor(v * discreteHeights) / discreteHeights : v;
+      if (v > 0) {
+        if (terrainTypeColoring)
+          return v < hillElevation ? [32, 128, 32, 255] : v < mountainElevation ? [196, 196, 32, 255] : [128, 32, 0, 255];
+        else
+          return green ? [level * 400, level * 150 + 100, 50, 255] : [250 - level * 300, 200 - level * 300, 0, 255];
+      } else {
+        return [0, level * 60 + 60, level * 80 + 100, 255];
+      }
+    };
+  }
+  function rescaleImage(source, width, height) {
+    let { canvas, ctx } = createCanvasCtx(width, height);
+    ctx.drawImage(source, 0, 0, source.width, source.height, 0, 0, width, height);
+    return canvas;
+  }
+
+  // src/hexdraw.ts
+  function context2d2(canvas) {
+    return canvas.getContext("2d");
+  }
+  var partsOrder = "334433443223100110013223".split("").map((s, i) => Number(s) * 4 + i % 2 + Math.floor(i / 4) % 2 * 2);
+
+  // src/prog.ts
+  var parameters = [
+    ["seed", "number", { tip: "Seed for teectonics." }],
+    ["noiseSeed", "number", { tip: "Seed for other." }],
+    ["width", "number", { tip: "Map width in pixels" }],
+    ["height", "number", { tip: "Map height in pixels" }],
+    [
+      "noiseSmoothness",
+      "range",
+      { max: 10, step: 0.5, tip: "Smootheness of the elevation noise" }
+    ],
+    [
+      "tectonicSmoothness",
+      "range",
+      {
+        max: 10,
+        step: 0.5,
+        tip: "Smootheness of the noise that is used for tectonic plates simulation"
+      }
+    ],
+    [
+      "noiseFactor",
+      "range",
+      {
+        min: -5,
+        max: 20,
+        step: 0.5,
+        tip: "Weight of the 'general purpose' elevation noise"
+      }
+    ],
+    [
+      "crustFactor",
+      "range",
+      {
+        min: -5,
+        max: 20,
+        step: 0.5,
+        tip: "Weight of the 'tectonic plates' noise. Increase to have more mountains on the edge on continents, reduce to have them inside."
+      }
+    ],
+    [
+      "tectonicFactor",
+      "range",
+      {
+        min: -1,
+        max: 10,
+        step: 0.1,
+        tip: "Amount of mountains and island chains and such"
+      }
+    ],
+    [
+      "pangaea",
+      "range",
+      {
+        min: -5,
+        max: 5,
+        tip: "Increasing this will make land gravitate the centre of the map, and vice versa"
+      }
+    ],
+    ["seaRatio", "range", { tip: "Sea percentage" }],
+    [
+      "flatness",
+      "range",
+      { tip: "Initial flatness of the non-mountain areas" }
+    ],
+    ["randomiseHumidity", "checkbox"],
+    ["averageTemperature", "range", { min: -30, max: 50, step: 1 }],
+    ["elevationCold", "range", { min: 0, max: 300, step: 1 }],
+    [
+      "erosion",
+      "range",
+      { max: 1e5, tip: "How long water-caused erosion will be simulated" }
+    ],
+    [
+      "riversShown",
+      "range",
+      {
+        max: 1e3,
+        tip: "Amount of rivers and lakes shown on elevation, humidity and biome maps"
+      }
+    ],
+    ["biomeScrambling", "range", { tip: "Adds randomness to biomes" }],
+    ["SET gameMapScale TO NOT 0 IF YOU WANT A GAME MAP", "tip"],
+    ["squareGrid", "checkbox"],
+    ["gameMapScale", "range", { min: 0, max: 4, step: 1 }],
+    [
+      "gameMapRivers",
+      "range",
+      {
+        max: 5e4,
+        step: 1e3,
+        tip: "How many rivers will there be on the low-res (hex) map"
+      }
+    ],
+    ["Graphical repesenation settings", "tip"],
+    ["generatePhoto", "checkbox"],
+    ["discreteHeights", "range", { max: 40, step: 1 }],
+    ["terrainTypeColoring", "checkbox"],
+    ["generateTileMap", "checkbox"]
+  ];
+  var defaultSettings = {
+    mapMode: 0,
+    seed: 1,
+    width: 640,
+    height: 640,
+    scale: 1,
+    noiseFactor: 10,
+    crustFactor: 6,
+    tectonicFactor: 3,
+    noiseSmoothness: 2,
+    tectonicSmoothness: 5,
+    pangaea: 0,
+    seaRatio: 0.55,
+    flatness: 0.5,
+    randomiseHumidity: false,
+    averageTemperature: 15,
+    erosion: 5e4,
+    riversShown: 400,
+    biomeScrambling: 0,
+    terrainTypeColoring: false,
+    discreteHeights: 0,
+    hillRatio: 0.12,
+    mountainRatio: 0.04,
+    gameMapRivers: 15e3,
+    gameMapScale: 2,
+    generatePhoto: true,
+    squareGrid: false
+  };
+  var settings = {};
+  function init() {
+    if (document.location.hash) {
+      settings = {};
+      let records = document.location.hash.substr(1).split("&").map((s) => s.split("="));
+      console.log(records);
+      for (let ss of records) {
+        settings[ss[0]] = ss[1] == "false" ? false : ss[1] == "true" ? true : Number(ss[1]);
+      }
+      console.log(settings);
+    }
+    if (!settings || !settings.width)
+      settings = JSON.parse(localStorage.mapGenSettings);
+    if (!settings || !settings.width)
+      settings = { ...defaultSettings };
+    rebuildForm();
+    applySettings();
+  }
+  window.onload = init;
+  window["resetSettings"] = () => {
+  };
+  function applySettings() {
+    for (let [id, type] of parameters) {
+      if (type == "tip") continue;
+      let element = document.getElementById(id);
+      settings[id] = element.type == "checkbox" ? element.checked : Number(element.value);
+      let id_value = document.getElementById(id + "_value");
+      if (id_value) id_value.innerText = String(settings[id]).substr(0, 8);
+    }
+    saveSettings();
+    generate(settings);
+  }
+  window.applySettings = applySettings;
+  document.body.addEventListener("mousedown", (e) => {
+    switch (e.target?.id) {
+      case "resetSettings":
+        settings = { ...defaultSettings };
+        rebuildForm();
+        applySettings();
+        return;
+    }
+  });
+  function lerpMaps(a, b, n, fields) {
+    let c = {};
+    for (let k of fields ?? Object.keys(a)) {
+      c[k] = new Float32Array(a[k].length);
+      let aa = a[k], bb = b[k];
+      if (k == "photo" || k == "biome") {
+        for (let i in aa) {
+          c[k][i] = lerpRGBA(aa[i], bb[i], n);
+        }
+      } else {
+        for (let i in aa) {
+          c[k][i] = aa[i] * (1 - n) + bb[i] * n;
+        }
+      }
+    }
+    return c;
+  }
+  blendMaps.onchange = (e) => {
+    console.time("blend");
+    let n = Number(blendMaps.value);
+    if (mapList.length >= 2) {
+      let terrain = lerpMaps(mapList[mapList.length - 2], mapList[mapList.length - 1], n, ["dryElevation", "tectonic"]);
+      let blend = generateMap(mapParams, terrain);
+      renderMap(blend);
+    }
+    console.timeEnd("blend");
+  };
+  var tips = {};
+  function rebuildForm() {
+    let form = document.getElementById("form");
+    form.innerHTML = "";
+    for (let param of parameters) {
+      let [id, type, also] = param;
+      also = also || {};
+      tips[id] = also.tip;
+      switch (type) {
+        case "tip":
+          form.innerHTML += `<div class="tip">${id}</div>`;
+          break;
+        case "checkbox":
+          form.innerHTML += `<div>${id}</div><input class="checkbox" type="checkbox" id="${id}" ${settings[id] ? "checked" : ""} />`;
+          break;
+        case "number":
+          form.innerHTML += `<div>${id}</div><input class="number" type="number" id="${id}" value="${settings[id]}" />`;
+          break;
+        case "range":
+          let min = also.min || 0;
+          let max = also.max || 1;
+          let step = also.step || (max - min) / 100;
+          form.innerHTML += `<div>${id}</div><input class="range" type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${settings[id]}"/>
+        <div id="${id}_value"></div>
+        `;
+          break;
+      }
+    }
+  }
+  function saveSettings() {
+    document.location.hash = Object.keys(settings).map((k) => `${k}=${settings[k]}`).join("&");
+    localStorage.mapGenSettings = JSON.stringify(settings);
+  }
+  var maps = [];
+  var miniMaps = [];
+  function showMap(data, title, fun, scale = 1 / 4, altitude) {
+    let image = data2image(data, settings.width, fun, altitude);
+    let mini = rescaleImage(image, image.width * scale, image.height * scale);
+    let ctx = context2d2(mini);
+    ctx.font = "14px Verdana";
+    ctx.fillStyle = "#fff";
+    ctx.strokeText(title, 5, 15);
+    ctx.fillText(title, 4, 14);
+    document.getElementById("minimaps")?.appendChild(mini);
+    let id = maps.length;
+    if (id == settings.mapMode)
+      document.getElementById("map")?.appendChild(image);
+    mini.id = "mini_" + id;
+    maps.push(image);
+    miniMaps.push(mini);
+    mini.onclick = () => {
+      settings.mapMode = id;
+      saveSettings();
+      document.getElementById("map")?.setHTMLUnsafe("");
+      document.getElementById("map")?.appendChild(image);
+    };
+  }
+  var generatedMap;
+  var mapList = [];
+  document.onmousemove = (e) => {
+    let mouseOffset = [e.offsetX, e.offsetY];
+    let target = e.target;
+    let tooltip = document.getElementById("tooltip");
+    tooltip.style.left = `${Math.min(window.innerWidth - 300, e.screenX + 20)}`;
+    tooltip.style.top = `${Math.min(window.innerHeight - 200, e.screenY - 40)}`;
+    let isCanvas = target.tagName == "CANVAS";
+    let id = target.id;
+    tooltip.style.display = isCanvas ? "grid" : tips[id] ? "block" : "none";
+    if (isCanvas) {
+      let localX = e.offsetX / target.width * settings.width;
+      let localY = e.offsetY / target.height * settings.height;
+      let ind = Math.floor(localX) + Math.floor(localY) * settings.width;
+      tooltip.innerHTML = Object.keys(generatedMap).map(
+        (key) => {
+          let v = generatedMap[key][ind];
+          return `<div>${key}</div><div>${key == "photo" ? v.map((n) => ~~n) : key == "biome" ? biomeNames[v].toUpperCase() : ~~(v * 1e6) / 1e6}</div>`;
+        }
+      ).join("");
+    } else if (tips[id]) {
+      tooltip.innerHTML = tips[id];
+    }
+  };
+  function renderMap(generatedMap2) {
+    let {
+      elevation,
+      tectonic,
+      rivers,
+      wind,
+      temperature,
+      humidity,
+      biome,
+      photo
+    } = generatedMap2;
+    console.time("draw");
+    document.getElementById("map")?.setHTMLUnsafe("");
+    document.getElementById("minimaps")?.setHTMLUnsafe("");
+    maps = [];
+    miniMaps = [];
+    showMap(
+      elevation,
+      "elevation",
+      elevation2Image({ elevation, rivers }, settings)
+      //(v,i) => v>0?[v * 400, 250 - v*150, (v - elevation[i-12*settings.width])*500, 255]:[0,0,100+v*200,255]
+    );
+    showMap(tectonic, "tectonics", (v, i) => [0, 0, 0, v * 255]);
+    showMap(temperature, "temperature", (v, i) => [
+      v * 5 + 100,
+      255 - Math.abs(v - 5) * 10,
+      155 - v * 5,
+      255
+    ]);
+    showMap(wind, "wind", (v, i) => [v * 100, 0, -v * 100, 255]);
+    showMap(
+      humidity,
+      "humidity",
+      (v, i) => rivers[i] && elevation[i] > 0 ? [0, 0, 0, 255] : i % settings.width < 20 ? [wind[i] * 100, 0, -wind[i] * 100, 255] : elevation[i] < 0 ? [0, 0, 0, 255] : [300 - v * 1e3, elevation[i] * 200 + 50, v * 350 - 150, 255]
+    );
+    showMap(
+      biome,
+      "biome",
+      (v, i) => elevation[i] < 0 || rivers[i] ? [0, 40, 80, 255] : biomeColors[v]
+    );
+    if (settings.generatePhoto) {
+      showMap(photo, "photo", (v, i) => v, void 0, (i) => Math.max(1, ~~(elevation[i] * 20) * 2));
+    }
+    console.timeEnd("draw");
+  }
+  var mapParams;
+  function generate(params) {
+    mapParams = params;
+    console.time("generation total");
+    generatedMap = generateMap(params);
+    mapList.push(generatedMap);
+    renderMap(generatedMap);
+    console.timeEnd("generation total");
+  }
+  function lerpRGBA(arg0, arg1, n) {
+    throw new Error("Function not implemented.");
+  }
+})();
