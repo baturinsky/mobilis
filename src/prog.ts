@@ -107,6 +107,7 @@ const parameters: [string, string, { tip?: string, min?: number, max?: number, s
   ["generatePhoto", "checkbox"],
   ["discreteHeights", "range", { max: 40, step: 1 }],
   ["terrainTypeColoring", "checkbox"],
+  ["shading", "checkbox"],
   ["generateTileMap", "checkbox"]
 ];
 
@@ -224,14 +225,16 @@ function lerpMaps(a: LayeredMap, b: LayeredMap, n: number, fields?: string[]) {
 declare var blendMaps: HTMLInputElement;
 
 blendMaps.onchange = (e => {
-  console.time("blend");
   let n = Number(blendMaps.value);
   if (mapList.length >= 2) {
+    console.time("blend");
     let terrain = lerpMaps(mapList[mapList.length - 2], mapList[mapList.length - 1], n, ["dryElevation", "tectonic"]) as Terrain;
+    console.timeEnd("blend");
+    console.time("blendGen");
     let blend = generateMap(mapParams, terrain);
+    console.timeEnd("blendGen");
     renderMap(blend);
   }
-  console.timeEnd("blend");
 })
 
 let tips = {};
@@ -326,7 +329,7 @@ document.onmousemove = (e) => {
     tooltip.innerHTML = Object.keys(generatedMap)
       .map((key) => {
         let v = generatedMap[key][ind];
-        return `<div>${key}</div><div>${key == "photo" ? v.map(n => ~~n) : key == "biome" ? biomeNames[v].toUpperCase() : ~~(v*1e6)/1e6}</div>`
+        return `<div>${key}</div><div>${key == "photo" ? v.map(n => ~~n) : key == "biome" ? biomeNames[v]?.toUpperCase() : ~~(v*1e6)/1e6}</div>`
       }
       )
       .join("");
@@ -339,6 +342,7 @@ document.onmousemove = (e) => {
 function renderMap(generatedMap: LayeredMap) {
   let {
     elevation,
+    dryElevation,
     tectonic,
     rivers,
     wind,
@@ -359,8 +363,14 @@ function renderMap(generatedMap: LayeredMap) {
     elevation,
     "elevation",
     elevation2Image({ elevation, rivers }, settings)
-    //(v,i) => v>0?[v * 400, 250 - v*150, (v - elevation[i-12*settings.width])*500, 255]:[0,0,100+v*200,255]
   );
+
+  showMap(
+    dryElevation,
+    "dryElevation",
+    elevation2Image({ elevation:elevation.map(v=>v/3+0.3), rivers:undefined }, settings)
+  );
+
 
   showMap(tectonic, "tectonics", (v, i) => [0, 0, 0, v * 255]);
 
@@ -441,7 +451,7 @@ function generateTileMap(m: LayeredMap) {
     setSeed(settings.seed);
 
     let { riverDepth, flowsTo } = generatePrettyRivers(
-      hexCoords.map((i) => m.elevation[i]),
+      hexCoords.map((i) => 1 + m.elevation[i] - m.humidity[i]),
       hexCoords.map((i) => Math.max(m.humidity[i], m.elevation[i])),
       settings.gameMapRivers,
       neighborDeltas,

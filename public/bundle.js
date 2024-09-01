@@ -185,9 +185,6 @@
     let tectonic = crust.map(
       (v, i) => {
         let t = (0.2 / (Math.abs(tectonicMedian - v) + 0.1) - 0.95) * (tectonicMul[i] - 0.2) * 2;
-        let fold = t * (1 + Math.sin(t ** 2));
-        fold = 0.5 * (noise[i] ** 2 - 0.2) * fold ** 2;
-        t += fold;
         return t;
       }
     );
@@ -233,14 +230,6 @@
         1 + 2 * flatness
       )
     );
-    let rivers = generateRiversAndErosion({
-      width,
-      height,
-      elevation,
-      tectonic,
-      erosion,
-      riversShown
-    });
     let wind = elevation.map(
       (h, i) => Math.cos((Math.abs(0.5 - i / mapSize) * 4 + 0.85) * Math.PI) / (h < 0 ? 1 : 1 + 5 * h * h)
     );
@@ -252,7 +241,15 @@
       )
     ).map((v) => v * 2 - 1);
     console.timeEnd("windSmoothing");
-    let humidity = generateHumidity({ width, height, elevation, wind, steps: 400 });
+    let rivers = generateRiversAndErosion({
+      width,
+      height,
+      elevation,
+      tectonic,
+      erosion,
+      riversShown
+    });
+    let humidity = generateHumidity({ width, elevation, wind, steps: 400 });
     if (randomiseHumidity) {
       humidity = humidity.map(
         (v, i) => Math.max(0, v + Math.sin(noise[i] * 50) / 10 - elevation[i] * 0.2)
@@ -264,15 +261,7 @@
     console.time("biome");
     let biome = temperature.map((t, i) => {
       let scramble = 1 + biomeScrambling * Math.sin(noise[i] * 100);
-      let b = biomeTable[Math.floor(
-        Math.max(
-          0,
-          Math.min(
-            humidity[i] * 4.5 * scramble,
-            5
-          )
-        )
-      )][Math.floor(Math.max(0, Math.min(t * scramble / 10 + 1, 3)))] || 0;
+      let b = biomeTable[~~clamp(0, 5, humidity[i] * 4.5 * scramble)][~~clamp(0, 3, t * scramble / 10 + 1)];
       if (b == TUNDRA && elevation[i] > 0.5) b = MOUNTAIN;
       return b;
     });
@@ -302,25 +291,29 @@
             lerpTo([64, 0, 0, 255], Math.min(1.5, et ** 2));
           }
           let fold = (1 + Math.sin(tectonic[i] * 30)) * (1 + random());
-          fold = (Math.sin(noise[i] * 100) + 0.5) * fold ** 2 * 0.1;
-          lerpTo([64, 64, 0], fold);
+          fold = (Math.sin(noise[i] * 100) + 0.5) * fold ** 2 * 0.05;
+          lerpTo([64, 32, 0], fold);
           folds[i] = 0;
           if (rivers[i]) {
-            return [0, 100, 150 + 100 * ele, 255];
+            rgba = [0, 100, 150 + 50 * rivers[i], 255];
           }
           for (let d of [1, width, -1, -width, 0]) {
             lerpTo(biomeColors[biome[i + d]], 0.1);
           }
-          if (ele > 0 && elevation[i + 1 + width * 1] < 0)
-            lerpTo([255, 255, 255, 255], 0.2);
-          if (ele > 0 && elevation[i - 1 - width * 1] < 0)
-            lerpTo([0, 0, 0, 255], 0.2);
           if (temperature[i] < 0) {
-            rgba = [255, 255, 255, 255];
+            lerpTo([500, 500, 500], -temperature[i] * 0.03);
           }
-          if (true) {
-            let shade = elevation[i + width + 1] * 2 - elevation[i - width - 1] - ele;
-            lerpTo([255, 255, 255], clamp(-0.2, 0.2, -shade * 3));
+          for (let c of [0, 1, 2])
+            rgba[c] = clamp(0, 255, rgba[c]);
+          if (shading) {
+            let shade = elevation[i + width] * 2 + elevation[i + 1] - ele - elevation[i - width] - elevation[i - 1];
+            if (ele > 0 && elevation[i + 1 + width * 1] < 0)
+              shade -= 0.01;
+            if (ele > 0 && elevation[i - 1 - width * 1] < 0)
+              shade += 0.01;
+            if (rivers[i] == 0 && rivers[i + width] != 0)
+              shade -= 0.1;
+            lerpTo([500, 500, 260], -shade);
             shades[i] = shade;
           }
           return rgba;
@@ -344,23 +337,30 @@
     };
     return layeredMap;
   }
-  function generateHumidity({ width, height, elevation, wind, steps }) {
-    console.time("humidity");
-    const mapDiagonal = Math.sqrt(width * width + height * height);
-    let border = width / 2;
+  function htow(elevation, width, blur = 20) {
+    let height = elevation.length / width;
     let humidityImage = data2image(elevation, width, (v, i) => [
       0,
       0,
       0,
       v <= 0 ? 100 : 0
     ]);
-    let wetness = createCanvasCtx(width + border * 2, height + border * 2);
-    wetness.ctx.beginPath();
-    wetness.ctx.rect(border / 2, border / 2, width + border, height + border);
-    wetness.ctx.lineWidth = border / 2;
-    wetness.ctx.stroke();
-    wetness.ctx.drawImage(humidityImage, width / 2, height / 2);
-    wetness.ctx.filter = "opacity(50%)";
+    let wetness = createCanvasCtx(width, height);
+    let wc = wetness.ctx;
+    wc.beginPath();
+    wc.lineWidth = width / 8;
+    wc.rect(0, 0, width, height);
+    wc.stroke();
+    wc.filter = `blur(${blur}px)`;
+    wc.filter = "opacity(50%)";
+    wc.drawImage(humidityImage, 0, 0);
+    return { humidityImage, wetness: wetness.canvas };
+  }
+  function generateHumidity({ width, elevation, wind, steps }) {
+    console.time("humidity");
+    let height = elevation.length / width;
+    const mapDiagonal = Math.sqrt(width * width + height * height);
+    let { humidityImage, wetness } = htow(elevation, width, 10);
     const spotSize = mapDiagonal / 10;
     for (let i = 0; i < steps; i++) {
       let start = [i % 100 / 100 * width, i % 10 / 10 * height];
@@ -369,23 +369,23 @@
         start[0] + windThere * 0.3 * width / 8,
         start[1] + Math.abs(windThere) * 0.5 * height / 12
       ];
-      wetness.ctx.drawImage(
-        wetness.canvas,
-        start[0] + border,
-        start[1] + border,
+      wetness.getContext("2d")?.drawImage(
+        wetness,
+        start[0],
+        start[1],
         spotSize,
         spotSize,
-        end[0] + border,
-        end[1] + border,
+        end[0],
+        end[1],
         spotSize,
         spotSize
       );
     }
-    context2d(humidityImage).filter = "blur(10px)";
+    context2d(humidityImage).filter = "blur(30px)";
     context2d(humidityImage).drawImage(
-      wetness.canvas,
-      border,
-      border,
+      wetness,
+      0,
+      0,
       width,
       height,
       0,
@@ -400,43 +400,60 @@
   function generateRiversAndErosion({
     width,
     height,
-    elevation,
-    humidity,
     tectonic,
+    elevation,
     erosion,
     riversShown
   }) {
     console.time("rivers");
+    let { wetness } = htow(elevation, width, 100);
+    let wi = image2alpha(wetness);
+    let e = elevation.map((v, i) => 1 - v - wi[i] * 0.3);
     let rivers = new Float32Array(width * height);
     let neighbors = createNeighborDeltas(width, SQUARE8)[0];
     for (let streamIndex = 0; streamIndex < erosion + riversShown; streamIndex++) {
-      let current = Math.floor(random() * width * height);
-      if (elevation[current] < random()) continue;
-      if (humidity && humidity[current] < random()) continue;
-      let limit = 1e4;
-      while (elevation[current] > -0.15 && limit-- > 0) {
+      let current = streamIndex * 12345 % elevation.length;
+      let path = [];
+      let limit = 1e3;
+      while (elevation[current] > -0.1 && limit-- > 0) {
         if (streamIndex > erosion) {
           rivers[current] += 1;
         }
-        let currentElevation = elevation[current];
-        let lowestNeighbor = 0, lowestNeighborElevation = 100;
-        for (let neighborIndex = 0; neighborIndex < 8; neighborIndex++) {
-          let neighborDelta = neighbors[neighborIndex];
-          if (elevation[current + neighborDelta] <= lowestNeighborElevation) {
+        let currentElevation = e[current];
+        let lowestNeighbor = 0, lowestNeighborElevation = 1e6;
+        for (let neighborDelta of neighbors) {
+          if (e[current + neighborDelta] <= lowestNeighborElevation) {
             lowestNeighbor = current + neighborDelta;
-            lowestNeighborElevation = elevation[lowestNeighbor];
+            lowestNeighborElevation = e[lowestNeighbor];
           }
         }
         if (lowestNeighborElevation < currentElevation) {
-          elevation[current] -= (currentElevation - lowestNeighborElevation) / 5;
+          let red = (e[current] - lowestNeighborElevation) * 0.01;
+          for (let d of [0, 0, -1, 1, -width, width]) {
+            elevation[current + d] -= red;
+            e[current + d] -= red;
+          }
         } else {
-          elevation[current] = lowestNeighborElevation + 0.02;
+          e[current] = lowestNeighborElevation + 0.05;
         }
+        path.push(current);
         current = lowestNeighbor;
       }
     }
     console.timeEnd("rivers");
     return rivers;
+  }
+  function mapToList(m) {
+    let l = [];
+    for (let k in m) {
+      l[k] = m[k];
+    }
+    return l;
+  }
+  function colorFromRGB16String(color) {
+    let n = parseInt(color, 16);
+    let c = [Math.floor(n / 256) * 16, Math.floor(n / 16) % 16 * 16, n % 16 * 16, 256];
+    return c;
   }
   var DESERT = 1;
   var GRASSLAND = 2;
@@ -455,7 +472,7 @@
   var BEACH = 15;
   var biomeTable = [
     [TUNDRA, STEPPE, SAVANNA, DESERT],
-    [TUNDRA, SHRUBLAND, GRASSLAND, GRASSLAND],
+    [TUNDRA, SHRUBLAND, GRASSLAND, SAVANNA],
     [SNOW, SHRUBLAND, GRASSLAND, TEMPERATE_FOREST],
     [SNOW, CONIFEROUS_FOREST, TEMPERATE_FOREST, TEMPERATE_FOREST],
     [TAIGA, CONIFEROUS_FOREST, DENSE_FOREST, DENSE_FOREST],
@@ -479,23 +496,11 @@
     "mountain shrubland",
     "beach"
   ];
-  function mapToList(m) {
-    let l = [];
-    for (let k in m) {
-      l[k] = m[k];
-    }
-    return l;
-  }
-  function colorFromRGB16String(color) {
-    let n = parseInt(color, 16);
-    let c = [Math.floor(n / 256) * 16, Math.floor(n / 16) % 16 * 16, n % 16 * 16, 256];
-    return c;
-  }
   var biomeColors = mapToList({
     [DESERT]: "ff0",
-    [GRASSLAND]: "8f8",
+    [GRASSLAND]: "0f0",
+    [SAVANNA]: "8f8",
     [TUNDRA]: "cca",
-    [SAVANNA]: "cc0",
     [SHRUBLAND]: "ad4",
     [TAIGA]: "064",
     [DENSE_FOREST]: "080",
@@ -522,25 +527,12 @@
     ctx.putImageData(idata, 0, 0);
     return canvas;
   }
-  function elevation2Image({ elevation, rivers }, {
-    discreteHeights = 10,
-    terrainTypeColoring = false,
-    hillRatio = 0.1,
-    mountainRatio = 0.02,
-    green = true
-  }) {
-    let hillElevation = approximateQuantile(elevation, 1 - hillRatio);
-    let mountainElevation = approximateQuantile(elevation, 1 - mountainRatio);
+  function elevation2Image({ elevation, rivers }, any) {
+    rivers ??= [];
     return (v, i) => {
-      if (rivers[i] && v > 0) {
-        return [0, v * 400, 200, 255];
-      }
-      let level = discreteHeights ? Math.floor(v * discreteHeights) / discreteHeights : v;
+      let level = elevation[i];
       if (v > 0) {
-        if (terrainTypeColoring)
-          return v < hillElevation ? [32, 128, 32, 255] : v < mountainElevation ? [196, 196, 32, 255] : [128, 32, 0, 255];
-        else
-          return green ? [level * 400, level * 150 + 100, 50, 255] : [250 - level * 300, 200 - level * 300, 0, 255];
+        return [250 - level * 300, 200 - level * 300, rivers[i] * 100, 255];
       } else {
         return [0, level * 60 + 60, level * 80 + 100, 255];
       }
@@ -656,6 +648,7 @@
     ["generatePhoto", "checkbox"],
     ["discreteHeights", "range", { max: 40, step: 1 }],
     ["terrainTypeColoring", "checkbox"],
+    ["shading", "checkbox"],
     ["generateTileMap", "checkbox"]
   ];
   var defaultSettings = {
@@ -746,14 +739,16 @@
     return c;
   }
   blendMaps.onchange = (e) => {
-    console.time("blend");
     let n = Number(blendMaps.value);
     if (mapList.length >= 2) {
+      console.time("blend");
       let terrain = lerpMaps(mapList[mapList.length - 2], mapList[mapList.length - 1], n, ["dryElevation", "tectonic"]);
+      console.timeEnd("blend");
+      console.time("blendGen");
       let blend = generateMap(mapParams, terrain);
+      console.timeEnd("blendGen");
       renderMap(blend);
     }
-    console.timeEnd("blend");
   };
   var tips = {};
   function rebuildForm() {
@@ -830,7 +825,7 @@
       tooltip.innerHTML = Object.keys(generatedMap).map(
         (key) => {
           let v = generatedMap[key][ind];
-          return `<div>${key}</div><div>${key == "photo" ? v.map((n) => ~~n) : key == "biome" ? biomeNames[v].toUpperCase() : ~~(v * 1e6) / 1e6}</div>`;
+          return `<div>${key}</div><div>${key == "photo" ? v.map((n) => ~~n) : key == "biome" ? biomeNames[v]?.toUpperCase() : ~~(v * 1e6) / 1e6}</div>`;
         }
       ).join("");
     } else if (tips[id]) {
@@ -840,6 +835,7 @@
   function renderMap(generatedMap2) {
     let {
       elevation,
+      dryElevation,
       tectonic,
       rivers,
       wind,
@@ -857,7 +853,11 @@
       elevation,
       "elevation",
       elevation2Image({ elevation, rivers }, settings)
-      //(v,i) => v>0?[v * 400, 250 - v*150, (v - elevation[i-12*settings.width])*500, 255]:[0,0,100+v*200,255]
+    );
+    showMap(
+      dryElevation,
+      "dryElevation",
+      elevation2Image({ elevation: elevation.map((v) => v / 3 + 0.3), rivers: void 0 }, settings)
     );
     showMap(tectonic, "tectonics", (v, i) => [0, 0, 0, v * 255]);
     showMap(temperature, "temperature", (v, i) => [
