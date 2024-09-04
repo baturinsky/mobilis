@@ -1,0 +1,45 @@
+Gathering: 🫐
+Hunting: 🏹
+Fishing: 🎣
+Woodcutting: 🪓
+Herding: 🐄
+Planting: 🌱
+Mining: ⛏️
+
+🌾Agriculture - Plant (terrain->food doubling)
+🐄Animal Husbandry - Herd (terrain->animal doubling)
+🐱Domesticate Cats - Food preservation bonus
+🐶Domesticate Dogs - Herding bonus
+🏺Pottery - Food preservation
+🏹Archery - Hunting bonus, Defence bonus
+🛞Wheel - Cart (terrain mobility cost bonus)
+⛵Sailing - Make Ship (sea mobility cost bonus)
+⛏️Mining - Mine (more resources from deposits)
+🪚Wood Working - Make wooden tools
+⚒️Metal Working - Make metal tools
+✍️Writing - Research Bonus
+📜Parchment Making - books from hides
+📖Paper Making - books from wood
+🏗️Masonry - build stone buildings (comfort)
+🐎Horseback Riding - terrain mobility bonus
+🗺️Navigation - mobility bonus
+🤔Philosophy - skill bonus
+💥Gunpowder - military bonus
+📚Printing Press - book bonus
+🛳️ Shipbuilding - steam ships
+⛺Tents - mobile housing
+🗿Archeology - get research from archeological sites
+
+
+🧮Mathematics, 👑Monarchy,🏰Feudalism, 🔬Guilds, 📆 Calendar, 💰 Currency - organisation
+
+🏭🏢
+
+🧭Compass, 🔍Optics, 🔭 Astronomy - sight range
+
+
+Shipbuilding
+🔭Astronomy ?
+Calendar ?
+Currency ?
+Iron Working ?

@@ -19,6 +19,11 @@ export function lerpRGBA(a: RGBA, b: RGBA, n: number): RGBA {
     return [0, 1, 2, 3].map(i => lerp(a[i], b[i], n)) as RGBA;
 }
 
+export function clampRGBA(rgba) {
+    for (let c of [0, 1, 2])
+        rgba[c] = clamp(0, 255, rgba[c]);
+}
+
 
 export let randomSeed = 6;
 export function setSeed(n: number) {
@@ -39,7 +44,7 @@ export function spread(range: number) {
 }
 
 export function coord2ind([x, y]: XY, width: number) {
-    return Math.floor(x) + Math.floor(y * width);
+    return ~~(x) + (~~y) * width;
 }
 
 export function context2d(canvas: HTMLCanvasElement) {
@@ -51,6 +56,8 @@ export function createCanvasCtx(width: number, height: number) {
     let canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
+    canvas.style.width = `${canvas.width * devicePixelRatio}px`;
+    canvas.style.height = `${canvas.height * devicePixelRatio}px`;
     let ctx = context2d(canvas);
     return { canvas, ctx };
 }
@@ -159,18 +166,28 @@ export type MapParams = {
     shading: boolean
 }
 
-export type LayeredMap = {
-    dryElevation: Float32Array;
-    tectonic: Float32Array;
+export type Poi = {
+    at: XY
+    icon: string
+    div?: HTMLDivElement
+}
 
-    elevation: Float32Array;
-    noise: Float32Array;
-    rivers: Float32Array;
-    wind: Float32Array;
-    temperature: Float32Array;
-    humidity: Float32Array;
-    biome: Float32Array;
-    photo: RGBA[];
+export type LayeredMap = {
+    dryElevation: Float32Array
+    tectonic: Float32Array
+
+    elevation: Float32Array
+    noise: Float32Array
+    rivers: Float32Array
+    wind: Float32Array
+    temperature: Float32Array
+    humidity: Float32Array
+    biome: Float32Array
+    photo: RGBA[]
+
+    poi: Poi[]
+
+    p: MapParams
 }
 
 const gen = ({ width, height }, smoothness: number, points, radius, alpha) =>
@@ -179,7 +196,7 @@ const gen = ({ width, height }, smoothness: number, points, radius, alpha) =>
         `blur(${smoothness}px)`))
 
 
-export type Terrain = { dryElevation: Float32Array, tectonic: Float32Array };
+export type Terrain = { dryElevation: Float32Array, tectonic: Float32Array, p: MapParams };
 
 export function generateTerrain(params: MapParams) {
     let {
@@ -215,8 +232,8 @@ export function generateTerrain(params: MapParams) {
     let tectonic = crust.map(
         (v, i) => {
             let t = (0.2 / (Math.abs(tectonicMedian - v) + 0.1) - 0.95) * (tectonicMul[i] - 0.2) * 2
-            /*let fold = t * (1 + Math.sin((t ** 2)*0.5));
-            fold = 0.5 * (noise[i] ** 2 - 0.2) * fold ** 2
+            /*let fold = t * (1 + Math.sin((t ** 2))) ;
+            fold = 2 * (noise[i] ** 2 - 0.2) * fold ** 2
             t += fold;*/
             return t;
         }
@@ -228,19 +245,28 @@ export function generateTerrain(params: MapParams) {
             noise[i] * noiseFactor +
             crust[i] * crustFactor +
             tectonic[i] * tectonicFactor +
-            -pangaea *
-            (Math.abs(i / mapSize - 0.5) + Math.abs((i % width) / width - 0.5))
+            -pangaea * (Math.abs(i / mapSize - 0.5) + Math.abs((i % width) / width - 0.5))
     );
+
 
     console.timeEnd("main");
 
     console.time("normalize");
 
+
+    for (let pass = 4; pass--;) {
+        for (let i = width; i < elevationFloats.length; i++) {
+            for (let n of [-2, 2, -width * 2, width * 2]) {
+                elevationFloats[i] += ((elevationFloats[i + n] || 0) - elevationFloats[i]) * 0.15;
+            }
+        }
+    }
+
     let dryElevation = normalizeValues(elevationFloats);
 
     console.timeEnd("normalize");
 
-    return { dryElevation, tectonic } as Terrain;
+    return { dryElevation, tectonic, p: params } as Terrain;
 }
 
 export function generateMap(params: MapParams, terrain?: Terrain): LayeredMap {
@@ -332,6 +358,13 @@ function generateAtmosphere(params: MapParams, terrain: Terrain) {
 
     console.time("biome");
     let biome = temperature.map((t, i) => {
+        let e = elevation[i];
+        //if (e > -0.2 && e < 0.02 && t>10)            return BEACH
+
+        if (e < -0.4)
+            return OCEAN;
+        if (e < -0)
+            return COAST;
         let scramble = (1 + biomeScrambling * Math.sin(noise[i] * 100));
         let b =
             biomeTable[~~clamp(0, 5, humidity[i] * 4.5 * scramble)]
@@ -350,6 +383,8 @@ function generateAtmosphere(params: MapParams, terrain: Terrain) {
         let rgba: RGBA;
 
         function lerpTo(b: number[], n: number) {
+            if (!b)
+                return;
             for (let i of [0, 1, 2])
                 rgba[i] = lerp(rgba[i], b[i], n);
         }
@@ -361,13 +396,13 @@ function generateAtmosphere(params: MapParams, terrain: Terrain) {
                 return [- (ele ** 2) * 1000 + 100, -(ele ** 2) * 500 + 150, -(ele ** 2) * 300 + 150, 255];
             } else {
                 rgba = [
-                    Math.max(0, temperature[i] * 15 - hum * 1000),
-                    150 - hum * 100,
-                    Math.max(0, temperature[i] * 8 - hum * 500),
+                    temperature[i] * 15 - hum * 700,
+                    150 - hum * 150,
+                    temperature[i] * 8 - hum * 500,
                     255,
                 ] as RGBA;
 
-                //rgba = [128, 128, 128, 255];
+                clampRGBA(rgba);
 
 
                 let et = (ele + tectonic[i]) * 2 - 1;
@@ -376,9 +411,9 @@ function generateAtmosphere(params: MapParams, terrain: Terrain) {
                     lerpTo([64, 0, 0, 255], Math.min(1.5, et ** 2));
                 }
 
-                let fold = (1 + Math.sin(tectonic[i] * 30)) * (1 + random());
+                let fold = (1 + Math.sin((noise[i] * 3 + tectonic[i]) * 100)) * (1 + random());
                 fold = (Math.sin(noise[i] * 100) + 0.5) * fold ** 2 * 0.05;
-                lerpTo([64, 32, 0], fold);
+                lerpTo([32, 32, 32], fold);
 
                 folds[i] = 0;
 
@@ -387,28 +422,31 @@ function generateAtmosphere(params: MapParams, terrain: Terrain) {
                 }
 
                 //console.log([...rgba]);
-                for (let d of [1, width, -1, -width, 0]) {
-                    lerpTo(biomeColors[biome[i + d]], 0.1);
-                }
+                for (let r of [1, 2, 3])
+                    for (let d of [1, width, -1, -width, 0]) {
+                        lerpTo(biomeColors[biome[i + d * r]], 0.05);
+                    }
 
                 if (temperature[i] < 0) {
-                    lerpTo([500,500,500], -temperature[i]*0.03);
+                    lerpTo([500, 500, 500], -temperature[i] * 0.03);
                 }
 
-                for(let c of [0,1,2])
-                    rgba[c] = clamp(0,255,rgba[c]);
+                clampRGBA(rgba);
 
                 /**Shading */
                 if (shading) {
+                    let s = 0;
+                    for (let dx = -2; dx <= 2; dx++)
+                        for (let dy = -2; dy <= 2; dy++) {
+                            s += elevation[i + dx + width * dy] * (Math.sign(dx) + Math.sign(dy));
+                        }
                     let shade = (
-                        elevation[i + width] * 2 + elevation[i + 1]
-                        - ele - elevation[i - width] - elevation[i - 1])
-
-                    if (ele > 0 && (elevation[i + 1 + width * 1] < 0))
-                        shade -= .01
-
-                    if (ele > 0 && (elevation[i - 1 - width * 1] < 0))
-                        shade += .01
+                        elevation[i + 1 + width] +
+                        elevation[i + width] +
+                        elevation[i + 1]
+                        - ele
+                        - elevation[i - width] -
+                        elevation[i - 1]) + s * 0.05;
 
                     if (rivers[i] == 0 && (rivers[i + width] != 0))
                         shade -= .1;
@@ -435,8 +473,13 @@ function generateAtmosphere(params: MapParams, terrain: Terrain) {
         biome,
         folds,
         photo,
-        shades
+        shades,
+        p: params,
+        poi: []
     } as LayeredMap;
+
+    populate(layeredMap)
+
 
     return layeredMap;
 }
@@ -520,18 +563,17 @@ type RiversParams = { width: number, height: number, elevation: Float32Array, te
 function generateRiversAndErosion({
     width,
     height,
-    tectonic,
     elevation,
     erosion,
     riversShown,
 }: RiversParams) {
+
     console.time("rivers");
 
     let { wetness } = htow(elevation, width, 100)
     let wi = image2alpha(wetness);
 
     let e = elevation.map((v, i) => 1 - v - wi[i] * 0.3);
-    //let e = elevation;
 
     let rivers = new Float32Array(width * height);
 
@@ -582,6 +624,12 @@ function generateRiversAndErosion({
 
     }
 
+    for (let i in elevation) {
+        if (elevation[i] > -0.2 && elevation[i] < 0) { elevation[i] = (elevation[i] > -0.1) ? 0.01 : elevation[i] * 2 + 0.2 }
+        if (elevation[i] > 0)
+            elevation[i] *= 1 + random() * 0.1
+    }
+
     console.timeEnd("rivers");
 
     return rivers;
@@ -613,7 +661,7 @@ export const DESERT = 1,
     SAVANNA = 4,
     SHRUBLAND = 5,
     TAIGA = 6,
-    DENSE_FOREST = 7,
+    TROPICAL_FOREST = 7,
     TEMPERATE_FOREST = 8,
     RAIN_FOREST = 9,
     SWAMP = 10,
@@ -621,16 +669,18 @@ export const DESERT = 1,
     STEPPE = 12,
     CONIFEROUS_FOREST = 13,
     MOUNTAIN = 14,
-    BEACH = 15;
+    BEACH = 15,
+    COAST = 16,
+    OCEAN = 17;
 
 // -> temperature V humidity
 export const biomeTable = [
     [TUNDRA, STEPPE, SAVANNA, DESERT],
     [TUNDRA, SHRUBLAND, GRASSLAND, SAVANNA],
     [SNOW, SHRUBLAND, GRASSLAND, TEMPERATE_FOREST],
-    [SNOW, CONIFEROUS_FOREST, TEMPERATE_FOREST, TEMPERATE_FOREST],
-    [TAIGA, CONIFEROUS_FOREST, DENSE_FOREST, DENSE_FOREST],
-    [TAIGA, CONIFEROUS_FOREST, DENSE_FOREST, RAIN_FOREST],
+    [SNOW, CONIFEROUS_FOREST, TEMPERATE_FOREST, TROPICAL_FOREST],
+    [TAIGA, CONIFEROUS_FOREST, TROPICAL_FOREST, TROPICAL_FOREST],
+    [TAIGA, CONIFEROUS_FOREST, TROPICAL_FOREST, RAIN_FOREST],
 ];
 
 export const biomeNames = [
@@ -642,7 +692,7 @@ export const biomeNames = [
     "shrubland",
     "taiga",
     "tropical forest",
-    "decidious forest",
+    "temperate forest",
     "rain forest",
     "swamp",
     "snow",
@@ -650,24 +700,30 @@ export const biomeNames = [
     "coniferous forest",
     "mountain shrubland",
     "beach",
-];
+    "coast",
+    "ocean"
+],
+    biomeAnimal = " ,🐪,🐂,🐻‍❄️,🦒,🦊,🐺,🐆,🦌,🐘,🐊,🐾,🐎,🦌,🐏,🦀,🐠,🐋,".split(","),
+    biomeEmoji = " ,🌵,🌻,❄️,🌿,🍂,🌲,🌴,🌳,🌴,🌱,⛄,🌾,🌲,⛰️,🏖️,🏞️,🌊".split(",")
+
+console.log(biomeEmoji, biomeEmoji.map(a => a.length));
 
 export const biomeColors = mapToList({
-    [DESERT]: "ff0",
-    [GRASSLAND]: "0f0",
-    [SAVANNA]: "8f8",
+    [DESERT]: "fa0",
+    [GRASSLAND]: "4f4",
+    [SAVANNA]: "ff8",
     [TUNDRA]: "cca",
     [SHRUBLAND]: "ad4",
     [TAIGA]: "064",
-    [DENSE_FOREST]: "080",
-    [TEMPERATE_FOREST]: "4a4",
+    [TROPICAL_FOREST]: "0a0",
+    [TEMPERATE_FOREST]: "060",
     [RAIN_FOREST]: "084",
     [SWAMP]: "880",
     [SNOW]: "fff",
-    [STEPPE]: "cfa",
-    [CONIFEROUS_FOREST]: "0a4",
-    [MOUNTAIN]: "844",
-    [BEACH]: "ffd",
+    [STEPPE]: "caa",
+    [CONIFEROUS_FOREST]: "0a6",
+    [MOUNTAIN]: "884",
+    [BEACH]: "ff0",
 }).map(colorFromRGB16String) as RGBA[];
 
 /**
@@ -678,7 +734,7 @@ export const biomeColors = mapToList({
  * @returns {HTMLCanvasElement}
  */
 
-export function data2image<T>(values: ReadonlyArray<T> | Float32Array, width: number, converter: (v: T, i: number) => number[], altitudes?: (number) => number) {
+export function data2image<T>(values: any, width: number, converter?: (v: any, i: number) => RGBA, altitudes?: (number) => number) {
     let height = values.length / width;
     let { canvas, ctx } = createCanvasCtx(width, height);
     let idata = ctx.createImageData(width, height);
@@ -686,22 +742,8 @@ export function data2image<T>(values: ReadonlyArray<T> | Float32Array, width: nu
         debugger;
     for (let i = 0; i < values.length; i++) {
         let h: number = 0;
-        let v = converter(values[i] as T, i) ?? 0;
+        let v: RGBA = converter ? (converter(values[i] as T, i) ?? 0) : [0, 0, 0, values[i]] as RGBA;
         idata.data.set(v, i * 4);
-        /*if (altitudes) {
-            h = altitudes(i);
-            for (let d = 0; d <= h; d++) {
-                let ih = (i - d * width) * 4;
-                if (ih >= 0 && ih < idata.data.length - 4) {
-                    if (d == h)
-                        idata.data.set(v, ih);
-                    else
-                        idata.data.set([64, 0, 0, 255], ih);
-                }
-            }
-        } else {
-            idata.data.set(v, i * 4);
-        }*/
     }
     ctx.putImageData(idata, 0, 0);
     return canvas;
@@ -714,11 +756,11 @@ export function elevation2Image(
     { elevation, rivers }, any
 ) {
     rivers ??= [];
-    return ((v, i) => {
+    return ((v: number, i) => {
         let level = elevation[i];
 
         if (v > 0) {
-            return [250 - level * 300 , 200 - level * 300, rivers[i]*100, 255];
+            return [250 - level * 300, 200 - level * 300, rivers[i] * 100, 255];
         } else {
             return [0, level * 60 + 60, level * 80 + 100, 255];
         }
@@ -745,40 +787,15 @@ export function subImage(image: HTMLCanvasElement, left: number, top: number, wi
     return canvas;
 }
 
-/**
- * Returns a matrix of rivers sizes and directions per cell
- * @param {number[]} heights
- * @param {number[]} neighborDeltas
- * @returns {number[]}
- */
-export function generatePrettyRivers(heights, probability, attempts, neighborDeltas, width) {
-    let hlen = heights.length;
-    let courseAt = 0;
-    let course = new Int32Array(100);
-    let riverDepth = new Int32Array(hlen);
-    let flowsTo = new Int32Array(hlen);
-    for (let riveri = 0; riveri < attempts; riveri++) {
-        let at = 12345 * riveri % hlen;
-        if (heights[at] <= 0 || probability[at] < (riveri % 10 / 10)) continue;
-        courseAt = 0;
-        while (heights[at] > 0 && courseAt < 100) {
-            let row = Math.floor(at / width);
-            let lowestNeighborDelta = neighborDeltas[row % 2].reduce((a, b) =>
-                heights[at + a] - riverDepth[at + a] <
-                    heights[at + b] - riverDepth[at + b]
-                    ? a
-                    : b
-            );
-            if (heights[at + lowestNeighborDelta] >= heights[at]) break;
-            at = at + lowestNeighborDelta;
-            course[courseAt++] = at;
-        }
-        if (courseAt > 2 && heights[at] <= 0) {
-            for (let i = 0; i < courseAt; i++) {
-                riverDepth[course[i]]++;
-                flowsTo[course[i]] = course[i + 1];
-            }
-        }
+export function populate(m: LayeredMap) {
+    m.poi = [];
+    for (let i = 400; i--;) {
+        let at: XY = [~~(random() * m.p.width), ~~(random() * m.p.height)];
+        let ind = coord2ind(at, m.p.width);
+        let biome = m.biome[ind]
+        let icon = i%2 ? biomeAnimal[biome] : biomeEmoji[biome];
+        let p: Poi = { at, icon };
+        m.poi.push(p)
     }
-    return { riverDepth, flowsTo };
+    console.log(m.poi);
 }

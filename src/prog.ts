@@ -1,13 +1,11 @@
 "use strict";
 
-import { SQUARE, AXIAL, rescaleCoordinates, createNeighborDeltas, distanceBetweenCells, SQUARE8, shortestPath, Layout } from "./geometry";
-import { context2d, drawTerrain, ISPATH } from "./hexdraw";
-import { data2image, rescaleImage, elevation2Image, generatePrettyRivers, randomSeed, generateMap, biomeNames, random, spread, setSeed, biomeColors, Numbers, ShowMapF, LayeredMap, RGBA, Terrain, MapParams } from "./worldgen";
+declare var main: HTMLCanvasElement, miniMaps: HTMLDivElement;
 
-let mouseOffset = [0, 0];
+import { data2image, rescaleImage, elevation2Image, generateMap, biomeNames, biomeColors, ShowMapF, LayeredMap, RGBA, Terrain, MapParams, biomeEmoji, biomeAnimal, XY, coord2ind } from "./worldgen";
 
 const parameters: [string, string, { tip?: string, min?: number, max?: number, step?: number }?][] = [
-  ["seed", "number", { tip: "Seed for teectonics." }],
+  ["seed", "number", { tip: "Seed for tectonics." }],
   ["noiseSeed", "number", { tip: "Seed for other." }],
   ["width", "number", { tip: "Map width in pixels" }],
   ["height", "number", { tip: "Map height in pixels" }],
@@ -127,19 +125,19 @@ let defaultSettings = {
   pangaea: 0,
   seaRatio: 0.55,
   flatness: 0.5,
-  randomiseHumidity: false,
+  randomiseHumidity: 0,
   averageTemperature: 15,
   erosion: 50000,
   riversShown: 400,
   biomeScrambling: 0,
-  terrainTypeColoring: false,
+  terrainTypeColoring: 0,
   discreteHeights: 0,
   hillRatio: 0.12,
   mountainRatio: 0.04,
   gameMapRivers: 15000,
   gameMapScale: 2,
-  generatePhoto: true,
-  squareGrid: false,
+  generatePhoto: 1,
+  squareGrid: 0,
 };
 
 let settings = {} as { [id: string]: number };
@@ -180,9 +178,9 @@ window["resetSettings"] = () => {
 function applySettings() {
   for (let [id, type] of parameters) {
     if (type == "tip") continue;
-    let element = document.getElementById(id);
+    let element = document.getElementById(id) as HTMLInputElement;
     settings[id] =
-      element.type == "checkbox" ? element.checked : Number(element.value);
+      element.type == "checkbox" ? element.checked ? 1 : 0 : Number(element.value);
     let id_value = document.getElementById(id + "_value");
     if (id_value) id_value.innerText = String(settings[id]).substr(0, 8);
   }
@@ -192,10 +190,10 @@ function applySettings() {
   generate(settings);
 }
 
-window.applySettings = applySettings;
+window["applySettings"] = applySettings;
 
 document.body.addEventListener("mousedown", e => {
-  switch (e.target?.id) {
+  switch ((e.target as HTMLElement)?.id) {
     case "resetSettings":
       settings = { ...defaultSettings };
       rebuildForm();
@@ -279,40 +277,53 @@ function saveSettings() {
 }
 
 
-let maps: HTMLCanvasElement[] = [],
-  miniMaps: HTMLCanvasElement[] = [];
+let maps: HTMLCanvasElement[] = [], minis: HTMLCanvasElement[], mainCanvas: HTMLCanvasElement;
 
 function showMap(data: Float32Array | RGBA[], title: string, fun: ShowMapF, scale = 1 / 4, altitude?: (i: number) => number) {
-  let image = data2image(data, settings.width, fun, altitude);
-  let mini = rescaleImage(image, image.width * scale, image.height * scale);
-  let ctx = context2d(mini);
+  let canvas = data2image(data, settings.width, fun, altitude);
+  let mini = rescaleImage(canvas, canvas.width * scale, canvas.height * scale);
+  let ctx = mini.getContext("2d") as CanvasRenderingContext2D;
   ctx.font = "14px Verdana";
   ctx.fillStyle = "#fff";
   ctx.strokeText(title, 5, 15);
   ctx.fillText(title, 4, 14);
 
-  document.getElementById("minimaps")?.appendChild(mini);
+  miniMaps.appendChild(mini);
   let id = maps.length;
 
-  if (id == settings.mapMode)
-    document.getElementById("map")?.appendChild(image);
+  if (id == settings.mapMode) {
+    main.appendChild(canvas);
+    main.style.width = `${settings.width * devicePixelRatio}px`;
+    main.style.height = `${settings.height * devicePixelRatio}px`;
+    mainCanvas = canvas;
+  }
 
   mini.id = "mini_" + id;
-  maps.push(image);
-  miniMaps.push(mini);
+  maps.push(canvas);
+  minis.push(mini);
   mini.onclick = () => {
     settings.mapMode = id;
     saveSettings();
-    document.getElementById("map")?.setHTMLUnsafe("");
-    document.getElementById("map")?.appendChild(image);
+    main.setHTMLUnsafe("");
+    main.appendChild(canvas);
   };
+  return canvas;
 }
 
-let generatedMap: LayeredMap;
+
+let m: LayeredMap;
 let mapList: LayeredMap[] = []
+let mapScroll = [0, 0];
+let mouseAt: XY;
 
 document.onmousemove = (e) => {
-  let mouseOffset = [e.offsetX, e.offsetY];
+
+  let move = [e.movementX, e.movementY]
+  if (e.target == mainCanvas && e.buttons) {
+    mapScroll[0] += move[0] * devicePixelRatio
+    mapScroll[1] += move[1] * devicePixelRatio
+    rescale()
+  }
   let target = e.target as HTMLCanvasElement;
   let tooltip = document.getElementById("tooltip") as HTMLElement;
   tooltip.style.left = `${Math.min(window.innerWidth - 300, e.screenX + 20)}`;
@@ -323,13 +334,17 @@ document.onmousemove = (e) => {
   tooltip.style.display = isCanvas ? "grid" : tips[id] ? "block" : "none";
 
   if (isCanvas) {
-    let localX = (e.offsetX / target.width) * settings.width;
-    let localY = (e.offsetY / target.height) * settings.height;
-    let ind = Math.floor(localX) + Math.floor(localY) * settings.width;
-    tooltip.innerHTML = Object.keys(generatedMap)
+    mouseAt = [
+      (e.offsetX / target.width) * settings.width,
+      (e.offsetY / target.height) * settings.height
+    ];
+    let ind = coord2ind(mouseAt, settings.width);
+    tooltip.innerHTML = Object.keys(m)
       .map((key) => {
-        let v = generatedMap[key][ind];
-        return `<div>${key}</div><div>${key == "photo" ? v.map(n => ~~n) : key == "biome" ? biomeNames[v]?.toUpperCase() : ~~(v*1e6)/1e6}</div>`
+        let v = m[key][ind];
+        return `<div>${key}</div><div>${key == "photo" ? v?.map(n => ~~n) :
+          key == "biome" ? v + " " + biomeEmoji[v] + biomeAnimal[v] + biomeNames[v]?.toUpperCase() :
+            ~~(v * 1e6) / 1e6}</div>`
       }
       )
       .join("");
@@ -338,8 +353,31 @@ document.onmousemove = (e) => {
   }
 };
 
+let zoom = 1;
 
-function renderMap(generatedMap: LayeredMap) {
+main.onwheel = (e) => {
+  let old = zoom;
+
+  zoom += (e.deltaY > 0 ? -1 : 1) * 1 / 8;
+  zoom = zoom < 0 ? 0 : zoom;
+  console.log(zoom, mapScroll);
+
+  //let oldcx = mapScroll[0] + 400 * 2 ** old
+  //let newcx = mapScroll[1] + 400 * 2 ** zoom
+
+  //let dcenter = mapScroll[0] + 400) * 2**old - (mapScroll[1] + 400) * 2**zoom;
+  //let centerxold = mapScroll[0] + 400 * 2 ** old;
+
+  mapScroll[0] = (mapScroll[0] - 400) * 2 ** (zoom - old) + 400;
+  mapScroll[1] = (mapScroll[1] - 400) * 2 ** (zoom - old) + 400;
+
+
+  e.preventDefault()
+  e.stopPropagation()
+  rescale()
+}
+
+function renderMap(m: LayeredMap) {
   let {
     elevation,
     dryElevation,
@@ -348,16 +386,15 @@ function renderMap(generatedMap: LayeredMap) {
     wind,
     temperature,
     humidity,
-    biome,
-    photo,
-  } = generatedMap;
+    biome
+  } = m;
 
 
   console.time("draw");
-  document.getElementById("map")?.setHTMLUnsafe("");
-  document.getElementById("minimaps")?.setHTMLUnsafe("");
+  main.setHTMLUnsafe("");
+  miniMaps.setHTMLUnsafe("");
   maps = [];
-  miniMaps = [];
+  minis = [];
 
   showMap(
     elevation,
@@ -368,7 +405,7 @@ function renderMap(generatedMap: LayeredMap) {
   showMap(
     dryElevation,
     "dryElevation",
-    elevation2Image({ elevation:elevation.map(v=>v/3+0.3), rivers:undefined }, settings)
+    elevation2Image({ elevation: elevation.map(v => v / 3 + 0.3), rivers: undefined }, settings)
   );
 
 
@@ -398,331 +435,48 @@ function renderMap(generatedMap: LayeredMap) {
   );
 
   if (settings.generatePhoto) {
-    showMap(photo, "photo", (v, i) => v, undefined, i => Math.max(1, ~~(elevation[i] * 20) * 2));
+    showMap(m.photo, "photo", (v) => v, undefined, i => Math.max(1, ~~(elevation[i] * 20) * 2));
+    for (let p of m.poi) {
+      let d = document.createElement("div");
+      d.classList.add("poi");
+      d.innerHTML = p.icon;
+      p.div = d;
+      main.appendChild(d);
+    }
   }
 
   console.timeEnd("draw");
-
+  rescale();
 }
 
 let mapParams: MapParams;
 
+function rescale() {
+  //mainCanvas.style.transformOrigin = `${mapScroll[0]}px ${mapScroll[1]}px`
+  mainCanvas.style.transform = `translate(${mapScroll[0]}px, ${mapScroll[1]}px) scale(${2 ** zoom})`
+  for (let p of m.poi) {
+    let d = p.div;
+    if (d) {
+      d.style.left = `${(p.at[0] * (2 ** zoom) + mapScroll[0] - 8)}px`;
+      d.style.top = `${(p.at[1] * (2 ** zoom) + mapScroll[1] - 8)}px`;
+    }
+  }
+
+}
+
 function generate(params) {
   mapParams = params;
   console.time("generation total");
-  generatedMap = generateMap(params);
-  mapList.push(generatedMap);
+  m = generateMap(params);
+  mapList.push(m);
 
-  renderMap(generatedMap);
+  renderMap(m);
 
   //if (params.generateTileMap)  generateTileMap(generatedMap);
 
   console.timeEnd("generation total");
 }
 
-function generateTileMap(m: LayeredMap) {
-  console.time("gamemap");
-
-  let layout: Layout = settings.squareGrid ? SQUARE : AXIAL;
-
-  let gameCanvas = document.getElementById("gameMap") as HTMLCanvasElement;
-
-  if (settings.gameMapScale) {
-    let rescale = rescaleCoordinates(
-      settings.height,
-      settings.width,
-      32 / settings.gameMapScale,
-      layout
-    );
-
-    let hexCoords = rescale.indices;
-    let { columns } = rescale;
-    let neighborDeltas = createNeighborDeltas(columns, layout);
-
-    console.log(rescale);
-
-    gameCanvas.width = settings.width * settings.gameMapScale + 32;
-    gameCanvas.height = settings.height * settings.gameMapScale;
-
-    gameCanvas.style.display = "block";
-    gameCanvas.style.width = `${gameCanvas.width}px;`
-    gameCanvas.style.height = `${gameCanvas.height}px;`;
-
-    setSeed(settings.seed);
-
-    let { riverDepth, flowsTo } = generatePrettyRivers(
-      hexCoords.map((i) => 1 + m.elevation[i] - m.humidity[i]),
-      hexCoords.map((i) => Math.max(m.humidity[i], m.elevation[i])),
-      settings.gameMapRivers,
-      neighborDeltas,
-      columns
-    );
-
-    const WATER = 1,
-      ROAD = 2,
-      BRIDGE = 3,
-      HILLROAD = 4,
-      DESERT = 5,
-      GRASS = 6,
-      SNOW = 7,
-      RIVER = 8,
-      DIRT = 9,
-      STEPPE = 10,
-      RIVERDELTA = 11,
-      HILL = 30,
-      CITY = 31,
-      DIRTHILL = 32,
-      MOUNTAIN = 33,
-      FOREST = 34,
-      LIGHTFOREST = 35,
-      GRASS1 = 36,
-      SNOWHILL = 37,
-      DESERTHILL = 38,
-      HILLFOREST = 39;
-
-    let tilesetHex = {
-      tilesSize: 32,
-      connected: [
-        [WATER, 0, 0],
-        [ROAD, 1, 0],
-        [DESERT, 1, 3],
-        [DIRT, 2, 0],
-        [GRASS, 4, 0],
-        [BRIDGE, 5, 0],
-        [SNOW, 5, 3],
-        [HILLROAD, 6, 0],
-        [RIVER, 6, 3],
-        [RIVERDELTA, 7, 3],
-      ],
-      single: [
-        [HILL, 3, 1],
-        [CITY, 5, 6],
-        [DIRTHILL, 3, 5],
-        [SNOWHILL, 3, 6],
-        [DESERTHILL, 3, 7],
-        [MOUNTAIN, 4, 4],
-        [FOREST, 3, 3],
-        [LIGHTFOREST, 4, 6],
-        [HILLFOREST, 4, 7],
-        [STEPPE, 7, 1],
-        [GRASS1, 4, 3],
-      ],
-      grouped: [
-        [RIVER, RIVERDELTA],
-        [ROAD, BRIDGE, HILLROAD],
-      ],
-      tilesheet: document.getElementById("hexSheet"),
-    };
-
-    let tilesetSquare = {
-      tilesSize: 32,
-      connected: [
-        [WATER, 0, 7],
-        [ROAD, 0, 3, ISPATH],
-        [BRIDGE, 0, 3, ISPATH],
-        [DESERT, 8, 0],
-        [RIVERDELTA, 8, 3],
-        [RIVER, 8, 6],
-        [SNOW, 2, 7],
-        [GRASS, 4, 7],
-      ],
-      single: [
-        [HILL, 3, 0],
-        [DIRTHILL, 3, 1],
-        [SNOWHILL, 3, 2],
-        [DESERTHILL, 3, 3],
-        [CITY, 5, 6],
-        [MOUNTAIN, 4, 4],
-        [FOREST, 3, 3],
-        [LIGHTFOREST, 4, 6],
-        [HILLFOREST, 4, 7],
-        [STEPPE, 7, 1],
-        [GRASS1, 4, 3],
-      ],
-      grouped: [
-        [RIVER, RIVERDELTA],
-        [ROAD, BRIDGE, HILLROAD],
-      ],
-      tilesheet: document.getElementById("squareSheet"),
-    };
-
-    type Cell = {
-      /** 0 , SNOW or DESERT */
-      cover: number;
-      /** 0, HILL or MOUNTAIN*/
-      highlands: number;
-      /** 0, WATER or RIVER*/
-      water: number;
-      /** if river, next cells it flows to. otherwise, 0*/
-      river: number;
-      /** 0 or FOREST*/
-      vegetation: number;
-      /** 0 or ROAD*/
-      road: number;
-      /** 0 or CITY*/
-      building: number;
-      empty: boolean
-    }
-
-    let gameMap = hexCoords.map((i, hexi) => {
-      let c = {} as Cell;
-
-      let [e, h, t] = [m.elevation[i], m.humidity[i], m.temperature[i]];
-
-      if (h == 0) {
-        return { empty: true };
-      }
-
-      c.cover = 0;
-      if (t < random() * 0.2 - 0.1) c.cover = SNOW;
-      else if (h < 0.25 && t > 20) c.cover = DESERT;
-
-      let water = e < 0;
-
-      c.highlands = 0;
-      if (!water && m.tectonic[i] + e > 1.3 + spread(0.8)) {
-        if (e > 0.6 + spread(0.2)) c.highlands = MOUNTAIN;
-        else c.highlands = HILL;
-      }
-
-      let river = riverDepth[hexi] > 3;
-
-      if (
-        h > 0.6 + spread(0.4) &&
-        !water &&
-        !river &&
-        c.highlands != MOUNTAIN
-      ) {
-        c.vegetation = LIGHTFOREST;
-      }
-
-      if (!c.cover && !c.vegetation && h > 0.4) c.cover = GRASS;
-
-      if (water) c.water = river ? RIVERDELTA : WATER;
-
-      if (river) c.river = flowsTo[hexi];
-
-      return c;
-    }) as Cell[];
-
-    let cities: number[] = [];
-    gameMap.forEach((c: Cell, i: number) => {
-      let quality =
-        10 +
-        (c.empty ? -10000 : 0) +
-        (c.water ? -1000 : 0) +
-        (c.river ? 10 : 0) +
-        (c.highlands == MOUNTAIN ? -1000 : 0) +
-        (c.highlands == HILL ? -10 : 0) +
-        (c.highlands == DESERT ? -10 : 0);
-      let row = Math.floor(i / columns);
-      for (let delta of neighborDeltas[row % 2]) {
-        let neighbor = gameMap[i + delta];
-        quality +=
-          (c.river ? 10 : 0) +
-          (c.water ? 50 : 0) +
-          (c.water == RIVERDELTA ? 50 : 0) +
-          (c.cover == 0 ? 10 : 0);
-      }
-      if (quality / 400 > random()) {
-        for (let other of cities) {
-          if (distanceBetweenCells(other, i, columns, layout) < 5) return;
-        }
-        c.building = CITY;
-        c.road = ROAD;
-        c.vegetation = 0;
-        cities.push(i);
-      }
-    });
-
-    console.time("roads");
-    let pathfindingDeltas = layout == SQUARE ? createNeighborDeltas(columns, SQUARE8) : neighborDeltas;
-    for (let start of cities) {
-      let end = cities[Math.floor(random() * cities.length)];
-      let path = shortestPath(
-        gameMap,
-        start,
-        end,
-        columns,
-        pathfindingDeltas,
-        (c) =>
-          !c || c.empty
-            ? 1000000
-            : c.road
-              ? 5
-              : c.water
-                ? 500
-                : c.river
-                  ? 100
-                  : c.highlands == MOUNTAIN
-                    ? 2000
-                    : c.highlands
-                      ? 100
-                      : 30
-      );
-      if (path)
-        for (let c of path) {
-          gameMap[c].road = ROAD;
-          if (gameMap[c].vegetation == FOREST)
-            gameMap[c].vegetation = LIGHTFOREST;
-        }
-    }
-    console.timeEnd("roads");
-
-    let tiles = gameMap.map((c) => {
-      let sprites = [GRASS1];
-
-      if (c.cover) sprites.push(c.cover);
-
-      if (c.highlands == HILL) {
-        if (!c.road)
-          sprites.push(
-            c.cover == DESERT ? DIRTHILL : c.cover == SNOW ? SNOWHILL : HILL
-          );
-      } else if (c.highlands == MOUNTAIN) {
-        sprites.push(MOUNTAIN);
-      }
-
-      if (c.river) sprites.push(RIVER);
-
-      if (c.water) {
-        if (c.water == RIVERDELTA) {
-          sprites.push(WATER);
-        }
-        sprites.push(c.water);
-      }
-
-      if (c.road)
-        sprites.push(
-          c.river || c.water ? BRIDGE : c.highlands ? HILLROAD : ROAD
-        );
-
-      if (c.vegetation == LIGHTFOREST)
-        sprites.push(c.highlands && !c.road ? HILLFOREST : LIGHTFOREST);
-
-      if (c.vegetation == FOREST) sprites.push(FOREST);
-
-      if (c.vegetation == FOREST) sprites.push(FOREST);
-
-      if (c.building) sprites.push(c.building);
-
-      return sprites;
-    });
-
-    drawTerrain(
-      gameCanvas.getContext("2d"),
-      tiles,
-      { [RIVER]: flowsTo },
-      columns,
-      layout == SQUARE ? tilesetSquare : tilesetHex,
-      layout
-    );
-  } else {
-    gameCanvas.style.display = `none`;
-  }
-
-  console.timeEnd("gamemap");
-}
 function lerpRGBA(arg0: any, arg1: any, n: number): any {
   throw new Error("Function not implemented.");
 }

@@ -78,6 +78,10 @@
   function clamp(a, b, n) {
     return n < a ? a : n > b ? b : n;
   }
+  function clampRGBA(rgba) {
+    for (let c of [0, 1, 2])
+      rgba[c] = clamp(0, 255, rgba[c]);
+  }
   var randomSeed = 6;
   function random() {
     let x = Math.sin(randomSeed) * 1e4;
@@ -85,7 +89,7 @@
     return x - Math.floor(x);
   }
   function coord2ind([x, y], width) {
-    return Math.floor(x) + Math.floor(y * width);
+    return ~~x + ~~y * width;
   }
   function context2d(canvas) {
     return canvas.getContext("2d");
@@ -94,6 +98,8 @@
     let canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
+    canvas.style.width = `${canvas.width * devicePixelRatio}px`;
+    canvas.style.height = `${canvas.height * devicePixelRatio}px`;
     let ctx = context2d(canvas);
     return { canvas, ctx };
   }
@@ -193,9 +199,16 @@
     );
     console.timeEnd("main");
     console.time("normalize");
+    for (let pass = 4; pass--; ) {
+      for (let i = width; i < elevationFloats.length; i++) {
+        for (let n of [-2, 2, -width * 2, width * 2]) {
+          elevationFloats[i] += ((elevationFloats[i + n] || 0) - elevationFloats[i]) * 0.15;
+        }
+      }
+    }
     let dryElevation = normalizeValues(elevationFloats);
     console.timeEnd("normalize");
-    return { dryElevation, tectonic };
+    return { dryElevation, tectonic, p: params };
   }
   function generateMap(params, terrain) {
     terrain ??= generateTerrain(params);
@@ -260,6 +273,11 @@
     );
     console.time("biome");
     let biome = temperature.map((t, i) => {
+      let e = elevation[i];
+      if (e < -0.4)
+        return OCEAN;
+      if (e < -0)
+        return COAST;
       let scramble = 1 + biomeScrambling * Math.sin(noise[i] * 100);
       let b = biomeTable[~~clamp(0, 5, humidity[i] * 4.5 * scramble)][~~clamp(0, 3, t * scramble / 10 + 1)];
       if (b == TUNDRA && elevation[i] > 0.5) b = MOUNTAIN;
@@ -270,6 +288,8 @@
     let photo;
     if (generatePhoto) {
       let lerpTo = function(b, n) {
+        if (!b)
+          return;
         for (let i of [0, 1, 2])
           rgba[i] = lerp(rgba[i], b[i], n);
       };
@@ -281,36 +301,38 @@
           return [-(ele ** 2) * 1e3 + 100, -(ele ** 2) * 500 + 150, -(ele ** 2) * 300 + 150, 255];
         } else {
           rgba = [
-            Math.max(0, temperature[i] * 15 - hum * 1e3),
-            150 - hum * 100,
-            Math.max(0, temperature[i] * 8 - hum * 500),
+            temperature[i] * 15 - hum * 700,
+            150 - hum * 150,
+            temperature[i] * 8 - hum * 500,
             255
           ];
+          clampRGBA(rgba);
           let et = (ele + tectonic[i]) * 2 - 1;
           if (et > 0) {
             lerpTo([64, 0, 0, 255], Math.min(1.5, et ** 2));
           }
-          let fold = (1 + Math.sin(tectonic[i] * 30)) * (1 + random());
+          let fold = (1 + Math.sin((noise[i] * 3 + tectonic[i]) * 100)) * (1 + random());
           fold = (Math.sin(noise[i] * 100) + 0.5) * fold ** 2 * 0.05;
-          lerpTo([64, 32, 0], fold);
+          lerpTo([32, 32, 32], fold);
           folds[i] = 0;
           if (rivers[i]) {
             rgba = [0, 100, 150 + 50 * rivers[i], 255];
           }
-          for (let d of [1, width, -1, -width, 0]) {
-            lerpTo(biomeColors[biome[i + d]], 0.1);
-          }
+          for (let r of [1, 2, 3])
+            for (let d of [1, width, -1, -width, 0]) {
+              lerpTo(biomeColors[biome[i + d * r]], 0.05);
+            }
           if (temperature[i] < 0) {
             lerpTo([500, 500, 500], -temperature[i] * 0.03);
           }
-          for (let c of [0, 1, 2])
-            rgba[c] = clamp(0, 255, rgba[c]);
+          clampRGBA(rgba);
           if (shading) {
-            let shade = elevation[i + width] * 2 + elevation[i + 1] - ele - elevation[i - width] - elevation[i - 1];
-            if (ele > 0 && elevation[i + 1 + width * 1] < 0)
-              shade -= 0.01;
-            if (ele > 0 && elevation[i - 1 - width * 1] < 0)
-              shade += 0.01;
+            let s = 0;
+            for (let dx = -2; dx <= 2; dx++)
+              for (let dy = -2; dy <= 2; dy++) {
+                s += elevation[i + dx + width * dy] * (Math.sign(dx) + Math.sign(dy));
+              }
+            let shade = elevation[i + 1 + width] + elevation[i + width] + elevation[i + 1] - ele - elevation[i - width] - elevation[i - 1] + s * 0.05;
             if (rivers[i] == 0 && rivers[i + width] != 0)
               shade -= 0.1;
             lerpTo([500, 500, 260], -shade);
@@ -333,8 +355,11 @@
       biome,
       folds,
       photo,
-      shades
+      shades,
+      p: params,
+      poi: []
     };
+    populate(layeredMap);
     return layeredMap;
   }
   function htow(elevation, width, blur = 20) {
@@ -400,7 +425,6 @@
   function generateRiversAndErosion({
     width,
     height,
-    tectonic,
     elevation,
     erosion,
     riversShown
@@ -440,13 +464,20 @@
         current = lowestNeighbor;
       }
     }
+    for (let i in elevation) {
+      if (elevation[i] > -0.2 && elevation[i] < 0) {
+        elevation[i] = elevation[i] > -0.1 ? 0.01 : elevation[i] * 2 + 0.2;
+      }
+      if (elevation[i] > 0)
+        elevation[i] *= 1 + random() * 0.1;
+    }
     console.timeEnd("rivers");
     return rivers;
   }
-  function mapToList(m) {
+  function mapToList(m2) {
     let l = [];
-    for (let k in m) {
-      l[k] = m[k];
+    for (let k in m2) {
+      l[k] = m2[k];
     }
     return l;
   }
@@ -461,7 +492,7 @@
   var SAVANNA = 4;
   var SHRUBLAND = 5;
   var TAIGA = 6;
-  var DENSE_FOREST = 7;
+  var TROPICAL_FOREST = 7;
   var TEMPERATE_FOREST = 8;
   var RAIN_FOREST = 9;
   var SWAMP = 10;
@@ -470,13 +501,15 @@
   var CONIFEROUS_FOREST = 13;
   var MOUNTAIN = 14;
   var BEACH = 15;
+  var COAST = 16;
+  var OCEAN = 17;
   var biomeTable = [
     [TUNDRA, STEPPE, SAVANNA, DESERT],
     [TUNDRA, SHRUBLAND, GRASSLAND, SAVANNA],
     [SNOW, SHRUBLAND, GRASSLAND, TEMPERATE_FOREST],
-    [SNOW, CONIFEROUS_FOREST, TEMPERATE_FOREST, TEMPERATE_FOREST],
-    [TAIGA, CONIFEROUS_FOREST, DENSE_FOREST, DENSE_FOREST],
-    [TAIGA, CONIFEROUS_FOREST, DENSE_FOREST, RAIN_FOREST]
+    [SNOW, CONIFEROUS_FOREST, TEMPERATE_FOREST, TROPICAL_FOREST],
+    [TAIGA, CONIFEROUS_FOREST, TROPICAL_FOREST, TROPICAL_FOREST],
+    [TAIGA, CONIFEROUS_FOREST, TROPICAL_FOREST, RAIN_FOREST]
   ];
   var biomeNames = [
     "unknown",
@@ -487,31 +520,36 @@
     "shrubland",
     "taiga",
     "tropical forest",
-    "decidious forest",
+    "temperate forest",
     "rain forest",
     "swamp",
     "snow",
     "steppe",
     "coniferous forest",
     "mountain shrubland",
-    "beach"
+    "beach",
+    "coast",
+    "ocean"
   ];
+  var biomeAnimal = " ,\u{1F42A},\u{1F402},\u{1F43B}\u200D\u2744\uFE0F,\u{1F992},\u{1F98A},\u{1F43A},\u{1F406},\u{1F98C},\u{1F418},\u{1F40A},\u{1F43E},\u{1F40E},\u{1F98C},\u{1F40F},\u{1F980},\u{1F420},\u{1F40B},".split(",");
+  var biomeEmoji = " ,\u{1F335},\u{1F33B},\u2744\uFE0F,\u{1F33F},\u{1F342},\u{1F332},\u{1F334},\u{1F333},\u{1F334},\u{1F331},\u26C4,\u{1F33E},\u{1F332},\u26F0\uFE0F,\u{1F3D6}\uFE0F,\u{1F3DE}\uFE0F,\u{1F30A}".split(",");
+  console.log(biomeEmoji, biomeEmoji.map((a) => a.length));
   var biomeColors = mapToList({
-    [DESERT]: "ff0",
-    [GRASSLAND]: "0f0",
-    [SAVANNA]: "8f8",
+    [DESERT]: "fa0",
+    [GRASSLAND]: "4f4",
+    [SAVANNA]: "ff8",
     [TUNDRA]: "cca",
     [SHRUBLAND]: "ad4",
     [TAIGA]: "064",
-    [DENSE_FOREST]: "080",
-    [TEMPERATE_FOREST]: "4a4",
+    [TROPICAL_FOREST]: "0a0",
+    [TEMPERATE_FOREST]: "060",
     [RAIN_FOREST]: "084",
     [SWAMP]: "880",
     [SNOW]: "fff",
-    [STEPPE]: "cfa",
-    [CONIFEROUS_FOREST]: "0a4",
-    [MOUNTAIN]: "844",
-    [BEACH]: "ffd"
+    [STEPPE]: "caa",
+    [CONIFEROUS_FOREST]: "0a6",
+    [MOUNTAIN]: "884",
+    [BEACH]: "ff0"
   }).map(colorFromRGB16String);
   function data2image(values, width, converter, altitudes) {
     let height = values.length / width;
@@ -521,7 +559,7 @@
       debugger;
     for (let i = 0; i < values.length; i++) {
       let h = 0;
-      let v = converter(values[i], i) ?? 0;
+      let v = converter ? converter(values[i], i) ?? 0 : [0, 0, 0, values[i]];
       idata.data.set(v, i * 4);
     }
     ctx.putImageData(idata, 0, 0);
@@ -543,16 +581,22 @@
     ctx.drawImage(source, 0, 0, source.width, source.height, 0, 0, width, height);
     return canvas;
   }
-
-  // src/hexdraw.ts
-  function context2d2(canvas) {
-    return canvas.getContext("2d");
+  function populate(m2) {
+    m2.poi = [];
+    for (let i = 400; i--; ) {
+      let at = [~~(random() * m2.p.width), ~~(random() * m2.p.height)];
+      let ind = coord2ind(at, m2.p.width);
+      let biome = m2.biome[ind];
+      let icon = i % 2 ? biomeAnimal[biome] : biomeEmoji[biome];
+      let p = { at, icon };
+      m2.poi.push(p);
+    }
+    console.log(m2.poi);
   }
-  var partsOrder = "334433443223100110013223".split("").map((s, i) => Number(s) * 4 + i % 2 + Math.floor(i / 4) % 2 * 2);
 
   // src/prog.ts
   var parameters = [
-    ["seed", "number", { tip: "Seed for teectonics." }],
+    ["seed", "number", { tip: "Seed for tectonics." }],
     ["noiseSeed", "number", { tip: "Seed for other." }],
     ["width", "number", { tip: "Map width in pixels" }],
     ["height", "number", { tip: "Map height in pixels" }],
@@ -665,19 +709,19 @@
     pangaea: 0,
     seaRatio: 0.55,
     flatness: 0.5,
-    randomiseHumidity: false,
+    randomiseHumidity: 0,
     averageTemperature: 15,
     erosion: 5e4,
     riversShown: 400,
     biomeScrambling: 0,
-    terrainTypeColoring: false,
+    terrainTypeColoring: 0,
     discreteHeights: 0,
     hillRatio: 0.12,
     mountainRatio: 0.04,
     gameMapRivers: 15e3,
     gameMapScale: 2,
-    generatePhoto: true,
-    squareGrid: false
+    generatePhoto: 1,
+    squareGrid: 0
   };
   var settings = {};
   function init() {
@@ -704,14 +748,14 @@
     for (let [id, type] of parameters) {
       if (type == "tip") continue;
       let element = document.getElementById(id);
-      settings[id] = element.type == "checkbox" ? element.checked : Number(element.value);
+      settings[id] = element.type == "checkbox" ? element.checked ? 1 : 0 : Number(element.value);
       let id_value = document.getElementById(id + "_value");
       if (id_value) id_value.innerText = String(settings[id]).substr(0, 8);
     }
     saveSettings();
     generate(settings);
   }
-  window.applySettings = applySettings;
+  window["applySettings"] = applySettings;
   document.body.addEventListener("mousedown", (e) => {
     switch (e.target?.id) {
       case "resetSettings":
@@ -784,33 +828,46 @@
     localStorage.mapGenSettings = JSON.stringify(settings);
   }
   var maps = [];
-  var miniMaps = [];
+  var minis;
+  var mainCanvas;
   function showMap(data, title, fun, scale = 1 / 4, altitude) {
-    let image = data2image(data, settings.width, fun, altitude);
-    let mini = rescaleImage(image, image.width * scale, image.height * scale);
-    let ctx = context2d2(mini);
+    let canvas = data2image(data, settings.width, fun, altitude);
+    let mini = rescaleImage(canvas, canvas.width * scale, canvas.height * scale);
+    let ctx = mini.getContext("2d");
     ctx.font = "14px Verdana";
     ctx.fillStyle = "#fff";
     ctx.strokeText(title, 5, 15);
     ctx.fillText(title, 4, 14);
-    document.getElementById("minimaps")?.appendChild(mini);
+    miniMaps.appendChild(mini);
     let id = maps.length;
-    if (id == settings.mapMode)
-      document.getElementById("map")?.appendChild(image);
+    if (id == settings.mapMode) {
+      main.appendChild(canvas);
+      main.style.width = `${settings.width * devicePixelRatio}px`;
+      main.style.height = `${settings.height * devicePixelRatio}px`;
+      mainCanvas = canvas;
+    }
     mini.id = "mini_" + id;
-    maps.push(image);
-    miniMaps.push(mini);
+    maps.push(canvas);
+    minis.push(mini);
     mini.onclick = () => {
       settings.mapMode = id;
       saveSettings();
-      document.getElementById("map")?.setHTMLUnsafe("");
-      document.getElementById("map")?.appendChild(image);
+      main.setHTMLUnsafe("");
+      main.appendChild(canvas);
     };
+    return canvas;
   }
-  var generatedMap;
+  var m;
   var mapList = [];
+  var mapScroll = [0, 0];
+  var mouseAt;
   document.onmousemove = (e) => {
-    let mouseOffset = [e.offsetX, e.offsetY];
+    let move = [e.movementX, e.movementY];
+    if (e.target == mainCanvas && e.buttons) {
+      mapScroll[0] += move[0] * devicePixelRatio;
+      mapScroll[1] += move[1] * devicePixelRatio;
+      rescale();
+    }
     let target = e.target;
     let tooltip = document.getElementById("tooltip");
     tooltip.style.left = `${Math.min(window.innerWidth - 300, e.screenX + 20)}`;
@@ -819,20 +876,34 @@
     let id = target.id;
     tooltip.style.display = isCanvas ? "grid" : tips[id] ? "block" : "none";
     if (isCanvas) {
-      let localX = e.offsetX / target.width * settings.width;
-      let localY = e.offsetY / target.height * settings.height;
-      let ind = Math.floor(localX) + Math.floor(localY) * settings.width;
-      tooltip.innerHTML = Object.keys(generatedMap).map(
+      mouseAt = [
+        e.offsetX / target.width * settings.width,
+        e.offsetY / target.height * settings.height
+      ];
+      let ind = coord2ind(mouseAt, settings.width);
+      tooltip.innerHTML = Object.keys(m).map(
         (key) => {
-          let v = generatedMap[key][ind];
-          return `<div>${key}</div><div>${key == "photo" ? v.map((n) => ~~n) : key == "biome" ? biomeNames[v]?.toUpperCase() : ~~(v * 1e6) / 1e6}</div>`;
+          let v = m[key][ind];
+          return `<div>${key}</div><div>${key == "photo" ? v?.map((n) => ~~n) : key == "biome" ? v + " " + biomeEmoji[v] + biomeAnimal[v] + biomeNames[v]?.toUpperCase() : ~~(v * 1e6) / 1e6}</div>`;
         }
       ).join("");
     } else if (tips[id]) {
       tooltip.innerHTML = tips[id];
     }
   };
-  function renderMap(generatedMap2) {
+  var zoom = 1;
+  main.onwheel = (e) => {
+    let old = zoom;
+    zoom += (e.deltaY > 0 ? -1 : 1) * 1 / 8;
+    zoom = zoom < 0 ? 0 : zoom;
+    console.log(zoom, mapScroll);
+    mapScroll[0] = (mapScroll[0] - 400) * 2 ** (zoom - old) + 400;
+    mapScroll[1] = (mapScroll[1] - 400) * 2 ** (zoom - old) + 400;
+    e.preventDefault();
+    e.stopPropagation();
+    rescale();
+  };
+  function renderMap(m2) {
     let {
       elevation,
       dryElevation,
@@ -841,14 +912,13 @@
       wind,
       temperature,
       humidity,
-      biome,
-      photo
-    } = generatedMap2;
+      biome
+    } = m2;
     console.time("draw");
-    document.getElementById("map")?.setHTMLUnsafe("");
-    document.getElementById("minimaps")?.setHTMLUnsafe("");
+    main.setHTMLUnsafe("");
+    miniMaps.setHTMLUnsafe("");
     maps = [];
-    miniMaps = [];
+    minis = [];
     showMap(
       elevation,
       "elevation",
@@ -878,17 +948,35 @@
       (v, i) => elevation[i] < 0 || rivers[i] ? [0, 40, 80, 255] : biomeColors[v]
     );
     if (settings.generatePhoto) {
-      showMap(photo, "photo", (v, i) => v, void 0, (i) => Math.max(1, ~~(elevation[i] * 20) * 2));
+      showMap(m2.photo, "photo", (v) => v, void 0, (i) => Math.max(1, ~~(elevation[i] * 20) * 2));
+      for (let p of m2.poi) {
+        let d = document.createElement("div");
+        d.classList.add("poi");
+        d.innerHTML = p.icon;
+        p.div = d;
+        main.appendChild(d);
+      }
     }
     console.timeEnd("draw");
+    rescale();
   }
   var mapParams;
+  function rescale() {
+    mainCanvas.style.transform = `translate(${mapScroll[0]}px, ${mapScroll[1]}px) scale(${2 ** zoom})`;
+    for (let p of m.poi) {
+      let d = p.div;
+      if (d) {
+        d.style.left = `${p.at[0] * 2 ** zoom + mapScroll[0] - 8}px`;
+        d.style.top = `${p.at[1] * 2 ** zoom + mapScroll[1] - 8}px`;
+      }
+    }
+  }
   function generate(params) {
     mapParams = params;
     console.time("generation total");
-    generatedMap = generateMap(params);
-    mapList.push(generatedMap);
-    renderMap(generatedMap);
+    m = generateMap(params);
+    mapList.push(m);
+    renderMap(m);
     console.timeEnd("generation total");
   }
   function lerpRGBA(arg0, arg1, n) {
