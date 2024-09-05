@@ -78,11 +78,19 @@
   function clamp(a, b, n) {
     return n < a ? a : n > b ? b : n;
   }
+  function lerpRGBA(a, b, n) {
+    if (!b)
+      return [0, 0, 0, 0];
+    return [0, 1, 2, 3].map((i) => lerp(a[i], b[i], n));
+  }
   function clampRGBA(rgba) {
     for (let c of [0, 1, 2])
       rgba[c] = clamp(0, 255, rgba[c]);
   }
   var randomSeed = 6;
+  function dist(a, b) {
+    return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5;
+  }
   function random() {
     let x = Math.sin(randomSeed) * 1e4;
     randomSeed = (randomSeed + Math.E) % 1e8;
@@ -565,53 +573,57 @@
     ctx.putImageData(idata, 0, 0);
     return canvas;
   }
-  function elevation2Image({ elevation, rivers }, any) {
-    rivers ??= [];
-    return (v, i) => {
-      let level = elevation[i];
-      if (v > 0) {
-        return [250 - level * 300, 200 - level * 300, rivers[i] * 100, 255];
-      } else {
-        return [0, level * 60 + 60, level * 80 + 100, 255];
-      }
-    };
-  }
   function rescaleImage(source, width, height) {
     let { canvas, ctx } = createCanvasCtx(width, height);
     ctx.drawImage(source, 0, 0, source.width, source.height, 0, 0, width, height);
     return canvas;
   }
   function populate(m2) {
-    m2.poi = [];
+    let pois = [];
     for (let i = 400; i--; ) {
-      let at = [~~(random() * m2.p.width), ~~(random() * m2.p.height)];
+      let at = [i % 400 / 400 * m2.p.width + random() * 40, i % 20 / 20 * m2.p.height + random() * 40];
       let ind = coord2ind(at, m2.p.width);
       let biome = m2.biome[ind];
       let icon = i % 2 ? biomeAnimal[biome] : biomeEmoji[biome];
-      let p = { at, icon };
-      m2.poi.push(p);
+      let size = 1 + random();
+      let p = { at, icon, size };
+      pois.push(p);
     }
-    console.log(m2.poi);
+    let allTypes = [...biomeAnimal, ...biomeEmoji];
+    let fp = [];
+    for (let type of allTypes) {
+      let thisType = pois.filter((p) => p.icon == type);
+      for (let i of [...thisType]) {
+        for (let j of [...thisType]) {
+          if (i != j && j.size && i.size && dist(i.at, j.at) < 50) {
+            i.size += j.size;
+            j.size = 0;
+          }
+        }
+      }
+      fp.push(...thisType.filter((a) => a.size));
+    }
+    console.log("fp", fp);
+    m2.poi = fp;
   }
 
   // src/prog.ts
   var parameters = [
-    ["seed", "number", { tip: "Seed for tectonics." }],
-    ["noiseSeed", "number", { tip: "Seed for other." }],
-    ["width", "number", { tip: "Map width in pixels" }],
-    ["height", "number", { tip: "Map height in pixels" }],
+    ["seed", "number"],
+    ["noiseSeed", "number"],
+    ["width", "number"],
+    ["height", "number"],
     [
       "noiseSmoothness",
       "range",
-      { max: 10, step: 0.5, tip: "Smootheness of the elevation noise" }
+      { max: 10, step: 0.5 }
     ],
     [
       "tectonicSmoothness",
       "range",
       {
         max: 10,
-        step: 0.5,
-        tip: "Smootheness of the noise that is used for tectonic plates simulation"
+        step: 0.5
       }
     ],
     [
@@ -620,8 +632,7 @@
       {
         min: -5,
         max: 20,
-        step: 0.5,
-        tip: "Weight of the 'general purpose' elevation noise"
+        step: 0.5
       }
     ],
     [
@@ -630,8 +641,7 @@
       {
         min: -5,
         max: 20,
-        step: 0.5,
-        tip: "Weight of the 'tectonic plates' noise. Increase to have more mountains on the edge on continents, reduce to have them inside."
+        step: 0.5
       }
     ],
     [
@@ -640,8 +650,7 @@
       {
         min: -1,
         max: 10,
-        step: 0.1,
-        tip: "Amount of mountains and island chains and such"
+        step: 0.1
       }
     ],
     [
@@ -649,15 +658,13 @@
       "range",
       {
         min: -5,
-        max: 5,
-        tip: "Increasing this will make land gravitate the centre of the map, and vice versa"
+        max: 5
       }
     ],
     ["seaRatio", "range", { tip: "Sea percentage" }],
     [
       "flatness",
-      "range",
-      { tip: "Initial flatness of the non-mountain areas" }
+      "range"
     ],
     ["randomiseHumidity", "checkbox"],
     ["averageTemperature", "range", { min: -30, max: 50, step: 1 }],
@@ -665,18 +672,16 @@
     [
       "erosion",
       "range",
-      { max: 1e5, tip: "How long water-caused erosion will be simulated" }
+      { max: 1e5 }
     ],
     [
       "riversShown",
       "range",
       {
-        max: 1e3,
-        tip: "Amount of rivers and lakes shown on elevation, humidity and biome maps"
+        max: 1e3
       }
     ],
-    ["biomeScrambling", "range", { tip: "Adds randomness to biomes" }],
-    ["SET gameMapScale TO NOT 0 IF YOU WANT A GAME MAP", "tip"],
+    ["biomeScrambling", "range"],
     ["squareGrid", "checkbox"],
     ["gameMapScale", "range", { min: 0, max: 4, step: 1 }],
     [
@@ -684,16 +689,10 @@
       "range",
       {
         max: 5e4,
-        step: 1e3,
-        tip: "How many rivers will there be on the low-res (hex) map"
+        step: 1e3
       }
     ],
-    ["Graphical repesenation settings", "tip"],
-    ["generatePhoto", "checkbox"],
-    ["discreteHeights", "range", { max: 40, step: 1 }],
-    ["terrainTypeColoring", "checkbox"],
-    ["shading", "checkbox"],
-    ["generateTileMap", "checkbox"]
+    ["discreteHeights", "range", { max: 40, step: 1 }]
   ];
   var defaultSettings = {
     mapMode: 0,
@@ -827,68 +826,59 @@
     document.location.hash = Object.keys(settings).map((k) => `${k}=${settings[k]}`).join("&");
     localStorage.mapGenSettings = JSON.stringify(settings);
   }
-  var maps = [];
-  var minis;
   var mainCanvas;
   function showMap(data, title, fun, scale = 1 / 4, altitude) {
     let canvas = data2image(data, settings.width, fun, altitude);
-    let mini = rescaleImage(canvas, canvas.width * scale, canvas.height * scale);
-    let ctx = mini.getContext("2d");
+    let img = rescaleImage(canvas, canvas.width * scale, canvas.height * scale);
+    let ctx = img.getContext("2d");
     ctx.font = "14px Verdana";
     ctx.fillStyle = "#fff";
     ctx.strokeText(title, 5, 15);
     ctx.fillText(title, 4, 14);
-    miniMaps.appendChild(mini);
-    let id = maps.length;
-    if (id == settings.mapMode) {
-      main.appendChild(canvas);
-      main.style.width = `${settings.width * devicePixelRatio}px`;
-      main.style.height = `${settings.height * devicePixelRatio}px`;
-      mainCanvas = canvas;
-    }
-    mini.id = "mini_" + id;
-    maps.push(canvas);
-    minis.push(mini);
-    mini.onclick = () => {
-      settings.mapMode = id;
-      saveSettings();
-      main.setHTMLUnsafe("");
-      main.appendChild(canvas);
-    };
+    main.appendChild(canvas);
+    main.style.width = `${settings.width * devicePixelRatio}px`;
+    main.style.height = `${settings.height * devicePixelRatio}px`;
+    mainCanvas = canvas;
     return canvas;
   }
   var m;
   var mapList = [];
   var mapScroll = [0, 0];
   var mouseAt;
+  var screenXY;
+  function updateTooltip(mouseAt2) {
+    let ind = coord2ind(mouseAt2, settings.width);
+    tooltip.style.left = `${Math.min(window.innerWidth - 300, screenXY[0] + 20)}`;
+    tooltip.style.top = `${Math.min(window.innerHeight - 300, screenXY[1] - 40)}`;
+    tooltip.style.display = "grid";
+    tooltip.innerHTML = Object.keys(m).map(
+      (key) => {
+        let v = m[key][ind];
+        return `<div>${key}</div><div>${key == "photo" ? v?.map((n) => ~~n) : key == "biome" ? v + " " + biomeEmoji[v] + biomeAnimal[v] + biomeNames[v]?.toUpperCase() : ~~(v * 1e6) / 1e6}</div>`;
+      }
+    ).join("");
+  }
   document.onmousemove = (e) => {
     let move = [e.movementX, e.movementY];
+    screenXY = [e.screenX, e.screenY];
     if (e.target == mainCanvas && e.buttons) {
       mapScroll[0] += move[0] * devicePixelRatio;
       mapScroll[1] += move[1] * devicePixelRatio;
       rescale();
     }
     let target = e.target;
-    let tooltip = document.getElementById("tooltip");
-    tooltip.style.left = `${Math.min(window.innerWidth - 300, e.screenX + 20)}`;
-    tooltip.style.top = `${Math.min(window.innerHeight - 200, e.screenY - 40)}`;
     let isCanvas = target.tagName == "CANVAS";
     let id = target.id;
-    tooltip.style.display = isCanvas ? "grid" : tips[id] ? "block" : "none";
     if (isCanvas) {
       mouseAt = [
-        e.offsetX / target.width * settings.width,
-        e.offsetY / target.height * settings.height
+        e.offsetX / target.width * settings.width / devicePixelRatio,
+        e.offsetY / target.height * settings.height / devicePixelRatio
       ];
-      let ind = coord2ind(mouseAt, settings.width);
-      tooltip.innerHTML = Object.keys(m).map(
-        (key) => {
-          let v = m[key][ind];
-          return `<div>${key}</div><div>${key == "photo" ? v?.map((n) => ~~n) : key == "biome" ? v + " " + biomeEmoji[v] + biomeAnimal[v] + biomeNames[v]?.toUpperCase() : ~~(v * 1e6) / 1e6}</div>`;
-        }
-      ).join("");
+      updateTooltip(mouseAt);
     } else if (tips[id]) {
       tooltip.innerHTML = tips[id];
+    } else {
+      tooltip.style.display = "none";
     }
   };
   var zoom = 1;
@@ -904,58 +894,15 @@
     rescale();
   };
   function renderMap(m2) {
-    let {
-      elevation,
-      dryElevation,
-      tectonic,
-      rivers,
-      wind,
-      temperature,
-      humidity,
-      biome
-    } = m2;
     console.time("draw");
     main.setHTMLUnsafe("");
-    miniMaps.setHTMLUnsafe("");
-    maps = [];
-    minis = [];
-    showMap(
-      elevation,
-      "elevation",
-      elevation2Image({ elevation, rivers }, settings)
-    );
-    showMap(
-      dryElevation,
-      "dryElevation",
-      elevation2Image({ elevation: elevation.map((v) => v / 3 + 0.3), rivers: void 0 }, settings)
-    );
-    showMap(tectonic, "tectonics", (v, i) => [0, 0, 0, v * 255]);
-    showMap(temperature, "temperature", (v, i) => [
-      v * 5 + 100,
-      255 - Math.abs(v - 5) * 10,
-      155 - v * 5,
-      255
-    ]);
-    showMap(wind, "wind", (v, i) => [v * 100, 0, -v * 100, 255]);
-    showMap(
-      humidity,
-      "humidity",
-      (v, i) => rivers[i] && elevation[i] > 0 ? [0, 0, 0, 255] : i % settings.width < 20 ? [wind[i] * 100, 0, -wind[i] * 100, 255] : elevation[i] < 0 ? [0, 0, 0, 255] : [300 - v * 1e3, elevation[i] * 200 + 50, v * 350 - 150, 255]
-    );
-    showMap(
-      biome,
-      "biome",
-      (v, i) => elevation[i] < 0 || rivers[i] ? [0, 40, 80, 255] : biomeColors[v]
-    );
-    if (settings.generatePhoto) {
-      showMap(m2.photo, "photo", (v) => v, void 0, (i) => Math.max(1, ~~(elevation[i] * 20) * 2));
-      for (let p of m2.poi) {
-        let d = document.createElement("div");
-        d.classList.add("poi");
-        d.innerHTML = p.icon;
-        p.div = d;
-        main.appendChild(d);
-      }
+    showMap(m2.photo, "photo", (v) => v, void 0, (i) => Math.max(1, ~~(m2.elevation[i] * 20) * 2));
+    for (let p of m2.poi) {
+      let d = document.createElement("div");
+      d.classList.add("poi");
+      d.innerHTML = p.icon;
+      p.div = d;
+      main.appendChild(d);
     }
     console.timeEnd("draw");
     rescale();
@@ -966,8 +913,9 @@
     for (let p of m.poi) {
       let d = p.div;
       if (d) {
-        d.style.left = `${p.at[0] * 2 ** zoom + mapScroll[0] - 8}px`;
-        d.style.top = `${p.at[1] * 2 ** zoom + mapScroll[1] - 8}px`;
+        d.style.left = `${p.at[0] * devicePixelRatio * 2 ** zoom + mapScroll[0] - 8}px`;
+        d.style.top = `${p.at[1] * devicePixelRatio * 2 ** zoom + mapScroll[1] - 8}px`;
+        d.style.fontSize = `${p.size ** 0.5 * 8 * 2 ** zoom}px`;
       }
     }
   }
@@ -978,8 +926,5 @@
     mapList.push(m);
     renderMap(m);
     console.timeEnd("generation total");
-  }
-  function lerpRGBA(arg0, arg1, n) {
-    throw new Error("Function not implemented.");
   }
 })();

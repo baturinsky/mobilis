@@ -33,6 +33,10 @@ export function setSeed(n: number) {
 export type XY = [number, number];
 export type Numbers = number[] | Float32Array;
 
+export function dist(a: XY, b: XY) {
+    return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5;
+}
+
 export function random() {
     let x = Math.sin(randomSeed) * 10000;
     randomSeed = (randomSeed + Math.E) % 1e8;
@@ -170,6 +174,7 @@ export type Poi = {
     at: XY
     icon: string
     div?: HTMLDivElement
+    size: number
 }
 
 export type LayeredMap = {
@@ -480,7 +485,6 @@ function generateAtmosphere(params: MapParams, terrain: Terrain) {
 
     populate(layeredMap)
 
-
     return layeredMap;
 }
 
@@ -788,14 +792,35 @@ export function subImage(image: HTMLCanvasElement, left: number, top: number, wi
 }
 
 export function populate(m: LayeredMap) {
-    m.poi = [];
+    let pois: Poi[] = [];
     for (let i = 400; i--;) {
-        let at: XY = [~~(random() * m.p.width), ~~(random() * m.p.height)];
+        //let at: XY = [~~(random() * m.p.width), ~~(random() * m.p.height)];
+        let at: XY = [(i % 400 / 400) * m.p.width + random()*40, (i % 20 / 20) * m.p.height + random()*40];
         let ind = coord2ind(at, m.p.width);
         let biome = m.biome[ind]
-        let icon = i%2 ? biomeAnimal[biome] : biomeEmoji[biome];
-        let p: Poi = { at, icon };
-        m.poi.push(p)
+        let icon = i % 2 ? biomeAnimal[biome] : biomeEmoji[biome];
+        let size = 1 + random();
+        let p: Poi = { at, icon, size };
+        pois.push(p)
     }
-    console.log(m.poi);
+
+    let allTypes = [...biomeAnimal, ...biomeEmoji];
+    let fp: Poi[] = [];
+
+    for (let type of allTypes) {
+        let thisType = pois.filter(p => p.icon == type);
+        for (let i of [...thisType]) {
+            for (let j of [...thisType]) {
+                if (i != j && j.size && i.size && dist(i.at, j.at) < 50) {
+                    i.size += j.size;
+                    j.size = 0;
+                }
+            }
+        }
+        fp.push(...thisType.filter(a=>a.size));
+    }
+
+    console.log("fp", fp);
+
+    m.poi = fp;
 }

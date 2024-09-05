@@ -1,6 +1,6 @@
 "use strict";
 
-declare var main: HTMLCanvasElement, tooltip: HTMLDivElement;
+declare var main: HTMLCanvasElement, miniMaps: HTMLDivElement, tooltip: HTMLDivElement;
 
 import { data2image, rescaleImage, elevation2Image, generateMap, biomeNames, biomeColors, ShowMapF, LayeredMap, RGBA, Terrain, MapParams, biomeEmoji, biomeAnimal, XY, coord2ind, lerpRGBA } from "./worldgen";
 
@@ -90,6 +90,8 @@ const parameters: [string, string, { tip?: string, min?: number, max?: number, s
   ],
   ["discreteHeights", "range", { max: 40, step: 1 }],
 ];
+
+let miniMapSize = 200;
 
 let defaultSettings = {
   mapMode: 0,
@@ -257,22 +259,36 @@ function saveSettings() {
 }
 
 
-let mainCanvas: HTMLCanvasElement;
+let maps: HTMLCanvasElement[] = [], minis: HTMLCanvasElement[], mainCanvas: HTMLCanvasElement;
 
 function showMap(data: Float32Array | RGBA[], title: string, fun: ShowMapF, scale = 1 / 4, altitude?: (i: number) => number) {
   let canvas = data2image(data, settings.width, fun, altitude);
-  let img = rescaleImage(canvas, canvas.width * scale, canvas.height * scale);
-  let ctx = img.getContext("2d") as CanvasRenderingContext2D;
+  let mini = rescaleImage(canvas, canvas.width * scale, canvas.height * scale);
+  let ctx = mini.getContext("2d") as CanvasRenderingContext2D;
   ctx.font = "14px Verdana";
   ctx.fillStyle = "#fff";
   ctx.strokeText(title, 5, 15);
   ctx.fillText(title, 4, 14);
 
-  main.appendChild(canvas);
-  main.style.width = `${settings.width * devicePixelRatio}px`;
-  main.style.height = `${settings.height * devicePixelRatio}px`;
-  mainCanvas = canvas;
+  miniMaps.appendChild(mini);
+  let id = maps.length;
 
+  if (id == settings.mapMode) {
+    main.appendChild(canvas);
+    main.style.width = `${settings.width * devicePixelRatio}px`;
+    main.style.height = `${settings.height * devicePixelRatio}px`;
+    mainCanvas = canvas;
+  }
+
+  mini.id = "mini_" + id;
+  maps.push(canvas);
+  minis.push(mini);
+  mini.onclick = () => {
+    settings.mapMode = id;
+    saveSettings();
+    main.setHTMLUnsafe("");
+    main.appendChild(canvas);
+  };
   return canvas;
 }
 
@@ -351,17 +367,71 @@ main.onwheel = (e) => {
 }
 
 function renderMap(m: LayeredMap) {
+  let {
+    elevation,
+    dryElevation,
+    tectonic,
+    rivers,
+    wind,
+    temperature,
+    humidity,
+    biome
+  } = m;
+
 
   console.time("draw");
   main.setHTMLUnsafe("");
-  
-  showMap(m.photo, "photo", (v) => v, undefined, i => Math.max(1, ~~(m.elevation[i] * 20) * 2));
-  for (let p of m.poi) {
-    let d = document.createElement("div");
-    d.classList.add("poi");
-    d.innerHTML = p.icon;
-    p.div = d;
-    main.appendChild(d);
+  miniMaps.setHTMLUnsafe("");
+  maps = [];
+  minis = [];
+
+  showMap(
+    elevation,
+    "elevation",
+    elevation2Image({ elevation, rivers }, settings)
+  );
+
+  showMap(
+    dryElevation,
+    "dryElevation",
+    elevation2Image({ elevation: elevation.map(v => v / 3 + 0.3), rivers: undefined }, settings)
+  );
+
+
+  showMap(tectonic, "tectonics", (v, i) => [0, 0, 0, v * 255]);
+
+  showMap(temperature, "temperature", (v, i) => [
+    v * 5 + 100,
+    255 - Math.abs(v - 5) * 10,
+    155 - v * 5,
+    255,
+  ]);
+
+  showMap(wind, "wind", (v, i) => [v * 100, 0, -v * 100, 255]);
+
+  showMap(humidity, "humidity", (v, i) =>
+    rivers[i] && elevation[i] > 0
+      ? [0, 0, 0, 255]
+      : i % settings.width < 20
+        ? [wind[i] * 100, 0, -wind[i] * 100, 255]
+        : elevation[i] < 0
+          ? [0, 0, 0, 255]
+          : [300 - v * 1000, elevation[i] * 200 + 50, v * 350 - 150, 255]
+  );
+
+  showMap(biome, "biome", (v, i) =>
+    elevation[i] < 0 || rivers[i] ? [0, 40, 80, 255] : biomeColors[v]
+  );
+
+  if (settings.generatePhoto) {
+    showMap(m.photo, "photo", (v) => v, undefined, i => Math.max(1, ~~(elevation[i] * 20) * 2));
+    for (let p of m.poi) {
+      let d = document.createElement("div");
+      d.classList.add("poi");
+      d.innerHTML = p.icon;
+      p.div = d;
+      main.appendChild(d);
+    }
   }
 
   console.timeEnd("draw");
@@ -390,7 +460,7 @@ function generate(params) {
   m = generateMap(params);
   mapList.push(m);
 
-  renderMap(m); 
+  renderMap(m);
 
   //if (params.generateTileMap)  generateTileMap(generatedMap);
 

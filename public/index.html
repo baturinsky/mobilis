@@ -88,26 +88,24 @@
   .tilesheet {
     display: none;
   }
+
 </style>
 
 <body>
-  <img class="tilesheet" id="hexSheet" src="tilesets/hexSheet.png" />
-  <img class="tilesheet" id="squareSheet" src="tilesets/squareSheet.png" />
-  <div id="tooltip">tooltip</div>
-  Worldgen by <a href="https://twitter.com/baturinsky">@baturinsky</a> -
-  <a href="https://github.com/baturinsky/worldgen">source at github</a>
   <div class="all">
+    <div>
+      <div id="main"></div>
+      <div id="miniMaps"></div>
+    </div>
     <div>
       <form id="form" onchange=applySettings()></form>
       <button id="resetSettings">Reset to default</button>
       <div>blend maps</div>
       <input class="number" type="number" id="blendMaps" min="0" max="1" step="0.05" value="0">
     </div>
-    <div>
-      <div id="main"></div>
-      <div id="miniMaps"></div>
-    </div>
   </div>
+  <div id="tooltip">tooltip</div>
+
 </body>
 
 <script src="bundle.js"></script>
