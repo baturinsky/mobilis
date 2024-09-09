@@ -26,16 +26,15 @@ Mining: ⛏️
 🤔Philosophy - skill bonus
 💥Gunpowder - military bonus
 📚Printing Press - book bonus
-🛳️ Shipbuilding - steam ships
+🛳️Shipbuilding - steam ships
 ⛺Tents - mobile housing
 🗿Archeology - get research from archeological sites
+🕸️Fishing Net => 2x 
 
 
 🧮Mathematics, 👑Monarchy,🏰Feudalism, 🔬Guilds, 📆 Calendar, 💰 Currency - organisation
 
 🏭🏢
-
-🧭Compass, 🔍Optics, 🔭 Astronomy - sight range
 
 
 Shipbuilding
@@ -43,3 +42,181 @@ Shipbuilding
 Calendar ?
 Currency ?
 Iron Working ?
+
+
+Hunting Wild Horse => meat, leather; #Horseback Riding
+Hunting Yak => 2meat, leather; #Animal husbandry
+Hunting Wild pig => 2meat, leather; #Animal husbandry
+Hunting Tiger => 0.5 meat, fur; #Domesticate Cats
+Hunting Wolves, Foxes => 0.5 meat, fur; #Domesticate Dogs
+Fishing => Fish
+
+Woodcutting => Wood 
+
+
+Resources:
+👖fabric
+🪵wood
+🍎food
+🛢️fuel
+💧water
+🪨metals
+📙book
+
+Tools:
+⛺housing
+🛒wagons
+🛠️tools
+⚙️engines
+🏹weapons
+🐴horse
+
+🌿:grass
+
+
+Writing:>📙
+Parchment:2👖>2📙
+Vigvam:🪵3👖>⛺
+Paper:🪵🛠️>4📙
+Printing:🪵2🛠️>10📙
+Archeology:🗿🛠️>30📙
+Tools:🪵>🛠️
+Metalworking:🛠️🏔️>🪨;🪵🪨>🛠️
+Rifles:⚙️⛽🪨>🏹
+Alloys:⚙️⛽🪨>⛺
+Cars:⚙️⛽🪨>🛒
+Hunting:🐾>🦊;
+Bows:>🏹;3🐾🏹>3🦊;
+Traps:🛠️2🐾>2🦊;
+Gathering:🌿>🍎
+Animal Husbandry:10🌿>10🍎
+Farms:3🌿>5🍎
+Plantations:3🌿>3👖
+Firewood:🪵>⛽
+Coal:⬛>5⛽
+Drills:⚙️⛽⬛>10⛽
+Oil:⚙️⛽🛢️>20⛽
+Greenhouse:⛺⛽>5🍎
+Fishing:🐠>3🍎
+Fishing Nets:🛠️🐠>5🍎
+Whaling: ⚓🛠️🐋>10🍎
+
+
+Dog Taming:0.05🥄0.2🦊0.2💗
+
+Cat Taming:0.03🥄-0.2🗑️0.2💗
+Pottery:-0.2🗑️
+Conservation:-0.3🗑️
+Cooking:-0.1🗑️0.5💗🍎
+
+Compass: 0.25🔭
+Optics: 0.25🔭
+Astronomy: 0.25🔭
+
+🧮Mathematics - exact values
+📆Calendar - exact time
+
+
+👑 Monarchy, 🏰 Feudalism, 🔬Guilds, 📆 Calendar, 💰 Currency - organisation
+
+
+
+Walking:>🏃 
+Carts:🛷>2🏃
+Horse Riding:🐴🛷>4🏃;3🌿>🐴
+Cars:⚙️⛽🛷>10🏃
+Steam:⚙️⛽🛷>10⚓
+Sails:👖🛷>3⚓
+
+Feast:1🍎>💗
+
+🗑️spoiled
+Pottery, Cat Taming, 
+
+
+=> books (!✍️Writing)
+👖fabric => books * 2 (!📜Parchment Making)  
+
+🪵wood => books * 4 (!📖Paper Making)
+📖Paper:🪵🛠️>4📙
+🪵wood + 🛠️tools => books * 10 (!📚Printing Press)
+📚Printing: 🪵🛠️>8📙
+
+wood + hides => ⛺Tents
+
+!Tool Making: 🪵wood/🪨metals => 🛠️tools
+!Housing: 👖fabric => ⛺Housing
+!Wheel: 🪵wood => 🛷Wagons
+
+!Sails: 👖fabric => sea travel bonus
+!Steamers: ⚙️engines +🛢️fuel => sea travel bonus
+!Cars: ⚙️engines+🛢️fuel => land travel bonus, 
+!Drills: ⚙️engines+🛢️fuel => mining bonus
+!Mining: 🛠️tools bonus to metal harvest
+
+!Metal Working: 
+    Tool bonus cap x2, 1/4 tool weight, 🪨metals=>4x 🛠️tools,
+    Weapon bonus cap x2, 1/4 weapon weight, 🪨metals=>4x 🛠️weapons,
+
+!Steel: 🪨metals => carts, housing
+
+!Industrialization: ⚙️engines +🛢️fuel crafting Bonus
+
+!Pottery: Food preservation bonus (from tools)
+!Cooking: Food weight decrease, effect bonus
+!Cat Taming: Food preservation bonus, small food usage penalty
+!Dog Taming: Hunting, herding bonus, small food usage penalty
+!Horseback riding: Hunting, herding, fighting bonus from horses
+
+!Archery: 🪵wood => 🗡️weapons
+
+
+
+🍖meat
+🐟fish
+🌾grains
+🍎fruits
+🐴horses ?
+⛵boats
+
+
+EXP: 
+
+Biome EXP: 
+woods
+planes
+cold
+dry
+mountains
+water
+
+
+🐂: 3x food, fabric => 🐄Animal Husbandry
+🐏: food, 3x fabric => 🐄Animal Husbandry
+🐗: 4x food, eats grain => 🐄Animal Husbandry
+🐺: food, fabric => 🐶Domesticate Dogs
+🐆: food, fabric => 🐱Domesticate Cats
+🐎: 2x food, fabric => 🐎Horseback Riding
+🐠: 3x food
+
+🌲🌳🌴: Gather (food), Cut (wood)
+🌿: Gather (food), Cut (wood *0.5)
+
+In forests => #Wood Working
+
+Cattle + pasture => more Cattle
+
+
+🐺wolf - cold-ish forest 
+🐗hog - hot-ish forest
+🐎horse - hotter plains
+🐪camel - deserts
+🐂yak - colder plains
+🐅tiger - hot jungles  
+🐏ram - cold/highland
+
+🐏🐺🐗🐅
+🐏🐂🐎🐪
+
+🪨metals - depends on tectonics
+🛢️fuel - random

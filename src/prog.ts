@@ -1,8 +1,46 @@
 "use strict";
 
-declare var main: HTMLCanvasElement, tooltip: HTMLDivElement;
+import { initGame, mult, Poi, poiLeft, Recipe, recipes, Game, parsePedia, populate, travelToP, setLocalRecipes } from "./game";
+import { scenario } from "./scenario";
+import {
+  data2image, rescaleImage, generateMap, ShowMapF, LayeredMap, RGBA,
+  XY, coord2ind, blendFull
+} from "./worldgen";
 
-import { data2image, rescaleImage, elevation2Image, generateMap, biomeNames, biomeColors, ShowMapF, LayeredMap, RGBA, Terrain, MapParams, biomeEmoji, biomeAnimal, XY, coord2ind, lerpRGBA } from "./worldgen";
+declare var main: HTMLCanvasElement, tooltip: HTMLDivElement, recdiv: HTMLDivElement, ps: HTMLDivElement;
+declare var blendMaps: HTMLInputElement;
+
+let m: LayeredMap;
+let mapList: LayeredMap[] = []
+let mapScroll = [0, 0];
+let mouseAt: XY;
+let screenXY;
+let zoom = 1;
+
+let poiPointed: Poi | undefined;
+
+export let game: Game;
+
+const biomeNames = [
+  "unknown",
+  "desert",
+  "grassland",
+  "tundra",
+  "savanna",
+  "shrubland",
+  "taiga",
+  "tropical forest",
+  "temperate forest",
+  "rain forest",
+  "swamp",
+  "snow",
+  "steppe",
+  "coniferous forest",
+  "mountain shrubland",
+  "beach",
+  "lake",
+  "ocean"
+];
 
 const parameters: [string, string, { tip?: string, min?: number, max?: number, step?: number }?][] = [
   ["seed", "number"],
@@ -12,7 +50,7 @@ const parameters: [string, string, { tip?: string, min?: number, max?: number, s
   [
     "noiseSmoothness",
     "range",
-    { max: 10, step: 0.5},
+    { max: 10, step: 0.5 },
   ],
   [
     "tectonicSmoothness",
@@ -68,7 +106,7 @@ const parameters: [string, string, { tip?: string, min?: number, max?: number, s
   [
     "erosion",
     "range",
-    { max: 100000},
+    { max: 100000 },
   ],
   [
     "riversShown",
@@ -123,6 +161,8 @@ let defaultSettings = {
 let settings = {} as { [id: string]: number };
 
 function init() {
+  parsePedia()
+
   if (document.location.hash) {
     settings = {};
     let records = document.location.hash
@@ -132,7 +172,7 @@ function init() {
     console.log(records);
     for (let ss of records) {
       settings[ss[0]] =
-        ss[1] == "false" ? false : ss[1] == "true" ? true : Number(ss[1]);
+        (ss[1] == "false" ? false : ss[1] == "true" ? true : Number(ss[1])) as any;
     }
     console.log(settings);
   }
@@ -144,14 +184,19 @@ function init() {
 
   rebuildForm();
   applySettings();
-}
 
-window.onload = init;
+  game = initGame();
+  game.poi = populate(m)
+  renderMap();
+  rescale();
 
-console.log
-
-
-window["resetSettings"] = () => {
+  document.onclick = e=>{
+    let rname = (e.target as HTMLButtonElement).dataset.rec;
+    if(rname){
+      let r = gam
+      console.log(rec);
+    }
+  }
 }
 
 
@@ -170,6 +215,7 @@ function applySettings() {
   generate(settings);
 }
 
+window.onload = init;
 window["applySettings"] = applySettings;
 
 document.body.addEventListener("mousedown", e => {
@@ -182,36 +228,14 @@ document.body.addEventListener("mousedown", e => {
   }
 })
 
-function lerpMaps(a: LayeredMap, b: LayeredMap, n: number, fields?: string[]) {
-  let c = {} as LayeredMap;
-  for (let k of (fields ?? Object.keys(a))) {
-    c[k] = new Float32Array(a[k].length);
-    let aa = a[k], bb = b[k]
-    if (k == "photo" || k == "biome") {
-      for (let i in aa) {
-        c[k][i] = lerpRGBA(aa[i], bb[i], n)
-      }
-    } else {
-      for (let i in aa) {
-        c[k][i] = aa[i] * (1 - n) + bb[i] * n;
-      }
-    }
-  }
-  return c
-}
 
-declare var blendMaps: HTMLInputElement;
 
 blendMaps.onchange = (e => {
   let n = Number(blendMaps.value);
   if (mapList.length >= 2) {
-    console.time("blend");
-    let terrain = lerpMaps(mapList[mapList.length - 2], mapList[mapList.length - 1], n, ["dryElevation", "tectonic"]) as Terrain;
-    console.timeEnd("blend");
-    console.time("blendGen");
-    let blend = generateMap(mapParams, terrain);
-    console.timeEnd("blendGen");
-    renderMap(blend);
+    m = blendFull(mapList[mapList.length - 2], mapList[mapList.length - 1], n);
+    //let blend = blendFast(mapList[mapList.length - 2], mapList[mapList.length - 1], n);    
+    renderMap();
   }
 })
 
@@ -256,32 +280,26 @@ function saveSettings() {
   localStorage.mapGenSettings = JSON.stringify(settings);
 }
 
-
 let mainCanvas: HTMLCanvasElement;
 
 function showMap(data: Float32Array | RGBA[], title: string, fun: ShowMapF, scale = 1 / 4, altitude?: (i: number) => number) {
-  let canvas = data2image(data, settings.width, fun, altitude);
-  let img = rescaleImage(canvas, canvas.width * scale, canvas.height * scale);
+  mainCanvas = data2image(data, settings.width, fun, altitude);
+  let img = rescaleImage(mainCanvas, mainCanvas.width * scale, mainCanvas.height * scale);
   let ctx = img.getContext("2d") as CanvasRenderingContext2D;
   ctx.font = "14px Verdana";
   ctx.fillStyle = "#fff";
   ctx.strokeText(title, 5, 15);
   ctx.fillText(title, 4, 14);
 
-  main.appendChild(canvas);
+  main.appendChild(mainCanvas);
   main.style.width = `${settings.width * devicePixelRatio}px`;
   main.style.height = `${settings.height * devicePixelRatio}px`;
-  mainCanvas = canvas;
+  mainCanvas = mainCanvas;
 
-  return canvas;
+  return mainCanvas;
 }
 
 
-let m: LayeredMap;
-let mapList: LayeredMap[] = []
-let mapScroll = [0, 0];
-let mouseAt: XY;
-let screenXY;
 
 function updateTooltip(mouseAt: XY) {
   let ind = coord2ind(mouseAt, settings.width);
@@ -292,11 +310,14 @@ function updateTooltip(mouseAt: XY) {
     .map((key) => {
       let v = m[key][ind];
       return `<div>${key}</div><div>${key == "photo" ? v?.map(n => ~~n) :
-        key == "biome" ? v + " " + biomeEmoji[v] + biomeAnimal[v] + biomeNames[v]?.toUpperCase() :
+        key == "biome" ? v + " " + biomeNames[v]?.toUpperCase() :
           ~~(v * 1e6) / 1e6}</div>`
     }
     )
     .join("");
+  if (poiPointed) {
+    tooltip.innerHTML += `${poiPointed.kind} ${~~poiLeft(poiPointed)}`;
+  }
 }
 
 document.onmousemove = (e) => {
@@ -313,7 +334,7 @@ document.onmousemove = (e) => {
   let isCanvas = target.tagName == "CANVAS";
   let id = target.id;
 
-  if (isCanvas) {
+  if (isCanvas || target.classList.contains("poi")) {
     mouseAt = [
       (e.offsetX / target.width) * settings.width / devicePixelRatio,
       (e.offsetY / target.height) * settings.height / devicePixelRatio
@@ -322,11 +343,10 @@ document.onmousemove = (e) => {
   } else if (tips[id]) {
     tooltip.innerHTML = tips[id];
   } else {
-    tooltip.style.display = "none";    
+    tooltip.style.display = "none";
   }
 };
 
-let zoom = 1;
 
 main.onwheel = (e) => {
   let old = zoom;
@@ -350,51 +370,74 @@ main.onwheel = (e) => {
   rescale()
 }
 
-function renderMap(m: LayeredMap) {
+
+function renderMap() {
 
   console.time("draw");
-  main.setHTMLUnsafe("");
-  
-  showMap(m.photo, "photo", (v) => v, undefined, i => Math.max(1, ~~(m.elevation[i] * 20) * 2));
-  for (let p of m.poi) {
-    let d = document.createElement("div");
-    d.classList.add("poi");
-    d.innerHTML = p.icon;
-    p.div = d;
-    main.appendChild(d);
+  mainCanvas && main.removeChild(mainCanvas);
+
+  showMap(m.photo, "photo", (v) => v as any, undefined, i => Math.max(1, ~~(m.elevation[i] * 20) * 2));
+  if (game) {
+    let s = ""
+    for (let i in game.poi) {
+      let p = game.poi[i];
+      s += `<div 
+class=poi 
+id=poi${i}
+>${p.kind}<center style=color:rgb(${15 * p.temp - 400},50,${-20 * p.temp + 100})>${~~poiLeft(p)}</center></div>`
+    }
+    ps.innerHTML = s;
   }
 
   console.timeEnd("draw");
   rescale();
 }
 
-let mapParams: MapParams;
+window["poiOver"] = e => {
+  console.log(e);
+}
 
-function rescale() {
+function recipeToText(r) {
+  return r ? Object.keys(r).map(k => `${r[k] == 1 ? '' : r[k]}${k}`).join("+") : ""
+}
+
+export function rescale() {
+  if (!game)
+    return;
+
   //mainCanvas.style.transformOrigin = `${mapScroll[0]}px ${mapScroll[1]}px`
   mainCanvas.style.transform = `translate(${mapScroll[0]}px, ${mapScroll[1]}px) scale(${2 ** zoom})`
-  for (let p of m.poi) {
-    let d = p.div;
+  for (let i in game.poi) {
+    let p = game.poi[i];
+    let d = document.querySelector(`#poi${i}`) as HTMLDivElement;
     if (d) {
-      d.style.left = `${(p.at[0] * devicePixelRatio * (2 ** zoom) + mapScroll[0] - 8)}px`;
-      d.style.top = `${(p.at[1] * devicePixelRatio * (2 ** zoom) + mapScroll[1] - 8)}px`;
-      d.style.fontSize = `${p.size ** 0.5 * 8 * 2 ** zoom}px`
+      let size = ((p.size ** 0.5) * 3 + 4) * 2 ** zoom;
+      d.style.left = `${(p.at[0] * devicePixelRatio * (2 ** zoom) + mapScroll[0] - size / 2)}px`;
+      d.style.top = `${(p.at[1] * devicePixelRatio * (2 ** zoom) + mapScroll[1] - size / 2)}px`;
+      d.style.fontSize = `${size}px`
+      d.dataset.cur = (p == game.home) ? '1' : '';
+      d.onmouseover = () => { poiPointed = p; };
+      d.onmouseleave = () => { poiPointed = undefined; };
+      d.onclick = () => { travelToP(p) }
     }
   }
 
+  setLocalRecipes()
+
+  recdiv.innerHTML =
+    "👨‍👩‍👦‍👦" + game.pop + "|" + Object.keys(game.store).map(k => `${k}${game.store[k]}`).join("|") + "<br/>" +
+    Object.values(game.cr).map(r => `<button data-rec="${r.name}" >${`${r.name} ${recipeToText(r.from)}➨${recipeToText(r.to)}`}</button>`).join("");
 }
 
 function generate(params) {
-  mapParams = params;
   console.time("generation total");
   m = generateMap(params);
   mapList.push(m);
 
-  renderMap(m); 
+  renderMap();
 
   //if (params.generateTileMap)  generateTileMap(generatedMap);
 
   console.timeEnd("generation total");
 }
-
 

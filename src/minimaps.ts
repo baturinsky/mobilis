@@ -2,6 +2,7 @@
 
 declare var main: HTMLCanvasElement, miniMaps: HTMLDivElement, tooltip: HTMLDivElement;
 
+import { game } from "./prog";
 import { data2image, rescaleImage, elevation2Image, generateMap, biomeNames, biomeColors, ShowMapF, LayeredMap, RGBA, Terrain, MapParams, biomeEmoji, biomeAnimal, XY, coord2ind, lerpRGBA } from "./worldgen";
 
 const parameters: [string, string, { tip?: string, min?: number, max?: number, step?: number }?][] = [
@@ -443,7 +444,7 @@ let mapParams: MapParams;
 function rescale() {
   //mainCanvas.style.transformOrigin = `${mapScroll[0]}px ${mapScroll[1]}px`
   mainCanvas.style.transform = `translate(${mapScroll[0]}px, ${mapScroll[1]}px) scale(${2 ** zoom})`
-  for (let p of m.poi) {
+  for (let p of game.poi) {
     let d = p.div;
     if (d) {
       d.style.left = `${(p.at[0] * devicePixelRatio * (2 ** zoom) + mapScroll[0] - 8)}px`;

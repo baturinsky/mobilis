@@ -1,7 +1,28 @@
+<meta charset="utf-8">
 <style>
+  *{
+    font-family: Verdana;
+  }
+
+  #ps{
+    position: relative;
+    z-index: 2;
+  }
+
+  @media (max-width: 1600px) {
+    #f{
+      display: none;
+    }
+  }
+
+  center{
+    font-size: 50%;
+    margin-top: -0.2rem;
+    pointer-events: none;
+  }
 
   input{
-    width:200px !important;
+    width:150px !important;
   }
 
   canvas {    
@@ -15,8 +36,16 @@
   .poi{
     position: absolute;
     cursor: pointer;
-    text-shadow: 1px 1px#000;
+    text-shadow: 0.5px 1px#000;
     user-select: none;
+    background: #fff8;
+    box-shadow: 1px 1px #000;
+    padding: 0.2rem;
+    border-radius: 0.5rem 0;
+  }
+
+  .poi[data-cur='1'] {
+    background: #fff;
   }
 
   #main canvas{
@@ -93,11 +122,15 @@
 
 <body>
   <div class="all">
-    <div>
-      <div id="main"></div>
+    <div>      
+      <div id="main">
+        <div id="ps"></div>
+      </div>
       <div id="miniMaps"></div>
     </div>
-    <div>
+    <div id="recdiv" style="min-width:400px !important">
+    </div>
+    <div id=f>
       <form id="form" onchange=applySettings()></form>
       <button id="resetSettings">Reset to default</button>
       <div>blend maps</div>

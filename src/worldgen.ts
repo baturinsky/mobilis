@@ -1,6 +1,14 @@
 "use strict";
 
 import { createNeighborDeltas, SQUARE8 } from "./geometry";
+import { biomeColors, biomeTable, LAKE, MOUNTAIN, OCEAN, scenario } from "./scenario";
+
+
+/*biomeAnimal = " ,🐪,🐂,🦌,🦒,🦊,🐺,🐆,🐗,🐘,🐊,🐐,🐎,🦌,🐏,🦀,🐠,🐋,".split(","),*/
+/*biomeEmoji = " ,🌵,🌻,❄️,🌿,🍂,🌲,🌴,🌳,🌴,🌱,⛄,🌾,🌲,⛰️,🏖️,🏞️,🌊".split(","),*/
+
+//console.log(biomeEmoji, biomeEmoji.map(a => a.length));
+
 
 export type RGBA = [number, number, number, number]
 export type ShowMapF = (value: number, index: number) => RGBA
@@ -144,7 +152,7 @@ function normalizeValues<T extends Arr>(values: T, picks = 1000): T {
     let picked = [...Array(picks)].map(() => values[Math.floor(random() * l)]);
     let max = 0;
     for (let v of picked) if (v > max) max = v;
-    return values.map((v) => v / max);
+    return values.map(v => v / max);
 }
 
 export type MapParams = {
@@ -170,16 +178,10 @@ export type MapParams = {
     shading: boolean
 }
 
-export type Poi = {
-    at: XY
-    icon: string
-    div?: HTMLDivElement
-    size: number
-}
 
-export type LayeredMap = {
-    dryElevation: Float32Array
-    tectonic: Float32Array
+export type Terrain = { dryElevation: Float32Array, tectonic: Float32Array, p: MapParams };
+
+export type LayeredMap = Terrain & {
 
     elevation: Float32Array
     noise: Float32Array
@@ -189,10 +191,6 @@ export type LayeredMap = {
     humidity: Float32Array
     biome: Float32Array
     photo: RGBA[]
-
-    poi: Poi[]
-
-    p: MapParams
 }
 
 const gen = ({ width, height }, smoothness: number, points, radius, alpha) =>
@@ -200,8 +198,6 @@ const gen = ({ width, height }, smoothness: number, points, radius, alpha) =>
         Math.sqrt(width * width + height * height) * radius, alpha),
         `blur(${smoothness}px)`))
 
-
-export type Terrain = { dryElevation: Float32Array, tectonic: Float32Array, p: MapParams };
 
 export function generateTerrain(params: MapParams) {
     let {
@@ -285,12 +281,9 @@ function generateAtmosphere(params: MapParams, terrain: Terrain) {
         width,
         height,
         averageTemperature,
-        biomeScrambling,
         erosion,
         riversShown,
         randomiseHumidity,
-        generatePhoto,
-        shading,
         noiseSmoothness,
         seaRatio,
         flatness,
@@ -328,10 +321,10 @@ function generateAtmosphere(params: MapParams, terrain: Terrain) {
     console.time("windSmoothing");
     wind = image2alpha(
         addFilter(
-            data2image(wind, width, (v) => [0, 0, 0, 127 * (v + 1)]),
+            data2image(wind, width, v => [0, 0, 0, 127 * (v + 1)]),
             "blur(3px)"
         )
-    ).map((v) => v * 2 - 1);
+    ).map(v => v * 2 - 1);
     console.timeEnd("windSmoothing");
 
     let rivers = generateRiversAndErosion({
@@ -361,111 +354,6 @@ function generateAtmosphere(params: MapParams, terrain: Terrain) {
 
     //humidity = humidity.map((w, i) => w * (1 + Math.atan(-temperature[i] / 100)));
 
-    console.time("biome");
-    let biome = temperature.map((t, i) => {
-        let e = elevation[i];
-        //if (e > -0.2 && e < 0.02 && t>10)            return BEACH
-
-        if (e < -0.4)
-            return OCEAN;
-        if (e < -0)
-            return COAST;
-        let scramble = (1 + biomeScrambling * Math.sin(noise[i] * 100));
-        let b =
-            biomeTable[~~clamp(0, 5, humidity[i] * 4.5 * scramble)]
-            [~~clamp(0, 3, t * scramble / 10 + 1)]
-        if (b == TUNDRA && elevation[i] > 0.5) b = MOUNTAIN;
-        return b;
-    });
-    console.timeEnd("biome");
-    let folds = [...humidity], shades = [...humidity];
-
-    /**@type {number[][]} */
-    let photo;
-    if (generatePhoto) {
-        console.time("photo");
-
-        let rgba: RGBA;
-
-        function lerpTo(b: number[], n: number) {
-            if (!b)
-                return;
-            for (let i of [0, 1, 2])
-                rgba[i] = lerp(rgba[i], b[i], n);
-        }
-
-        photo = [...humidity].map((hum, i) => {
-            let ele = elevation[i];
-            if (ele < 0) {
-                //return [0, (1 + ele * 2) * 55 + 30, (1 + ele * 2) * 155 + 50, 255];
-                return [- (ele ** 2) * 1000 + 100, -(ele ** 2) * 500 + 150, -(ele ** 2) * 300 + 150, 255];
-            } else {
-                rgba = [
-                    temperature[i] * 15 - hum * 700,
-                    150 - hum * 150,
-                    temperature[i] * 8 - hum * 500,
-                    255,
-                ] as RGBA;
-
-                clampRGBA(rgba);
-
-
-                let et = (ele + tectonic[i]) * 2 - 1;
-
-                if (et > 0) {
-                    lerpTo([64, 0, 0, 255], Math.min(1.5, et ** 2));
-                }
-
-                let fold = (1 + Math.sin((noise[i] * 3 + tectonic[i]) * 100)) * (1 + random());
-                fold = (Math.sin(noise[i] * 100) + 0.5) * fold ** 2 * 0.05;
-                lerpTo([32, 32, 32], fold);
-
-                folds[i] = 0;
-
-                if (rivers[i]) {
-                    rgba = [0, 100, 150 + 50 * rivers[i], 255];
-                }
-
-                //console.log([...rgba]);
-                for (let r of [1, 2, 3])
-                    for (let d of [1, width, -1, -width, 0]) {
-                        lerpTo(biomeColors[biome[i + d * r]], 0.05);
-                    }
-
-                if (temperature[i] < 0) {
-                    lerpTo([500, 500, 500], -temperature[i] * 0.03);
-                }
-
-                clampRGBA(rgba);
-
-                /**Shading */
-                if (shading) {
-                    let s = 0;
-                    for (let dx = -2; dx <= 2; dx++)
-                        for (let dy = -2; dy <= 2; dy++) {
-                            s += elevation[i + dx + width * dy] * (Math.sign(dx) + Math.sign(dy));
-                        }
-                    let shade = (
-                        elevation[i + 1 + width] +
-                        elevation[i + width] +
-                        elevation[i + 1]
-                        - ele
-                        - elevation[i - width] -
-                        elevation[i - 1]) + s * 0.05;
-
-                    if (rivers[i] == 0 && (rivers[i + width] != 0))
-                        shade -= .1;
-
-                    lerpTo([500, 500, 260], -shade)
-                    shades[i] = shade
-                }
-
-                return rgba;
-            }
-        });
-        console.timeEnd("photo");
-    }
-
     let layeredMap = {
         tectonic,
         dryElevation,
@@ -475,17 +363,126 @@ function generateAtmosphere(params: MapParams, terrain: Terrain) {
         wind,
         temperature,
         humidity,
-        biome,
-        folds,
-        photo,
-        shades,
         p: params,
         poi: []
-    } as LayeredMap;
+    } as any as LayeredMap;
 
-    populate(layeredMap)
+    layeredMap.biome = generateBiome(layeredMap)
+    layeredMap.photo = generatePhoto(layeredMap)
 
     return layeredMap;
+}
+
+function generateBiome(m: LayeredMap) {
+    console.time("biome");
+    let biome = m.temperature.map((t, i) => {
+        let e = m.elevation[i];
+
+        if (e < -0) return OCEAN;
+        if (m.rivers[i]) return LAKE;
+
+        let scramble = (1 + m.p.biomeScrambling * Math.sin(m.noise[i] * 100));
+
+        let b =
+            biomeTable[~~clamp(0, 5, m.humidity[i] * 4.5 * scramble)]
+            [~~clamp(0, 3, t * scramble / 10 + 1)]
+        if (m.elevation[i] > 0.4) b = MOUNTAIN;
+        return b;
+    });
+    console.timeEnd("biome");
+
+    return biome;
+}
+
+function generatePhoto(m: LayeredMap) {
+    let { humidity, elevation, temperature, tectonic, noise, rivers, biome } = m;
+    let { width, shading } = m.p;
+    let folds = [...humidity], shades = [...humidity];
+
+    /**@type {number[][]} */
+    let photo;
+    console.time("photo");
+
+    let rgba: RGBA;
+
+    function lerpTo(b: number[], n: number) {
+        if (!b)
+            return;
+        for (let i of [0, 1, 2])
+            rgba[i] = lerp(rgba[i], b[i], n);
+    }
+
+    photo = [...humidity].map((hum, i) => {
+        let ele = elevation[i];
+        if (ele < 0) {
+            //return [0, (1 + ele * 2) * 55 + 30, (1 + ele * 2) * 155 + 50, 255];
+            return [- (ele ** 2) * 1000 + 100, -(ele ** 2) * 500 + 150, -(ele ** 2) * 300 + 150, 255];
+        } else {
+            rgba = [
+                temperature[i] * 15 - hum * 700,
+                150 - hum * 150,
+                temperature[i] * 8 - hum * 500,
+                255,
+            ] as RGBA;
+
+            clampRGBA(rgba);
+
+
+            let et = (ele + tectonic[i]) * 2 - 1;
+
+            if (et > 0) {
+                lerpTo([64, 0, 0, 255], Math.min(1.5, et ** 2));
+            }
+
+            let fold = (1 + Math.sin((noise[i] * 3 + tectonic[i]) * 100)) * (1 + random());
+            fold = (Math.sin(noise[i] * 100) + 0.5) * fold ** 2 * 0.05;
+            lerpTo([32, 32, 32], fold);
+
+            folds[i] = 0;
+
+            if (rivers[i]) {
+                rgba = [0, 100, 150 + 50 * rivers[i], 255];
+            }
+
+            //console.log([...rgba]);
+            for (let r of [1, 2, 3])
+                for (let d of [1, width, -1, -width, 0]) {
+                    lerpTo(biomeColors[biome[i + d * r]], 0.05);
+                }
+
+            if (temperature[i] < 0) {
+                lerpTo([500, 500, 500], -temperature[i] * 0.03);
+            }
+
+            clampRGBA(rgba);
+
+            /**Shading */
+            if (shading) {
+                let s = 0;
+                for (let dx = -2; dx <= 2; dx++)
+                    for (let dy = -2; dy <= 2; dy++) {
+                        s += elevation[i + dx + width * dy] * (Math.sign(dx) + Math.sign(dy));
+                    }
+                let shade = (
+                    elevation[i + 1 + width] +
+                    elevation[i + width] +
+                    elevation[i + 1]
+                    - ele
+                    - elevation[i - width] -
+                    elevation[i - 1]) + s * 0.05;
+
+                if (rivers[i] == 0 && (rivers[i + width] != 0))
+                    shade -= .1;
+
+                lerpTo([500, 500, 260], -shade)
+                shades[i] = shade
+            }
+
+            return rgba;
+        }
+    });
+    console.timeEnd("photo");
+    return photo
 }
 
 
@@ -659,77 +656,6 @@ export function colorFromRGB16String(color) {
 }
 
 
-export const DESERT = 1,
-    GRASSLAND = 2,
-    TUNDRA = 3,
-    SAVANNA = 4,
-    SHRUBLAND = 5,
-    TAIGA = 6,
-    TROPICAL_FOREST = 7,
-    TEMPERATE_FOREST = 8,
-    RAIN_FOREST = 9,
-    SWAMP = 10,
-    SNOW = 11,
-    STEPPE = 12,
-    CONIFEROUS_FOREST = 13,
-    MOUNTAIN = 14,
-    BEACH = 15,
-    COAST = 16,
-    OCEAN = 17;
-
-// -> temperature V humidity
-export const biomeTable = [
-    [TUNDRA, STEPPE, SAVANNA, DESERT],
-    [TUNDRA, SHRUBLAND, GRASSLAND, SAVANNA],
-    [SNOW, SHRUBLAND, GRASSLAND, TEMPERATE_FOREST],
-    [SNOW, CONIFEROUS_FOREST, TEMPERATE_FOREST, TROPICAL_FOREST],
-    [TAIGA, CONIFEROUS_FOREST, TROPICAL_FOREST, TROPICAL_FOREST],
-    [TAIGA, CONIFEROUS_FOREST, TROPICAL_FOREST, RAIN_FOREST],
-];
-
-export const biomeNames = [
-    "unknown",
-    "desert",
-    "grassland",
-    "tundra",
-    "savanna",
-    "shrubland",
-    "taiga",
-    "tropical forest",
-    "temperate forest",
-    "rain forest",
-    "swamp",
-    "snow",
-    "steppe",
-    "coniferous forest",
-    "mountain shrubland",
-    "beach",
-    "coast",
-    "ocean"
-],
-    biomeAnimal = " ,🐪,🐂,🐻‍❄️,🦒,🦊,🐺,🐆,🦌,🐘,🐊,🐾,🐎,🦌,🐏,🦀,🐠,🐋,".split(","),
-    biomeEmoji = " ,🌵,🌻,❄️,🌿,🍂,🌲,🌴,🌳,🌴,🌱,⛄,🌾,🌲,⛰️,🏖️,🏞️,🌊".split(",")
-
-console.log(biomeEmoji, biomeEmoji.map(a => a.length));
-
-export const biomeColors = mapToList({
-    [DESERT]: "fa0",
-    [GRASSLAND]: "4f4",
-    [SAVANNA]: "ff8",
-    [TUNDRA]: "cca",
-    [SHRUBLAND]: "ad4",
-    [TAIGA]: "064",
-    [TROPICAL_FOREST]: "0a0",
-    [TEMPERATE_FOREST]: "060",
-    [RAIN_FOREST]: "084",
-    [SWAMP]: "880",
-    [SNOW]: "fff",
-    [STEPPE]: "caa",
-    [CONIFEROUS_FOREST]: "0a6",
-    [MOUNTAIN]: "884",
-    [BEACH]: "ff0",
-}).map(colorFromRGB16String) as RGBA[];
-
 /**
  * Convert data to image according to callback function
  * @param {any[]} values
@@ -791,36 +717,41 @@ export function subImage(image: HTMLCanvasElement, left: number, top: number, wi
     return canvas;
 }
 
-export function populate(m: LayeredMap) {
-    let pois: Poi[] = [];
-    for (let i = 400; i--;) {
-        //let at: XY = [~~(random() * m.p.width), ~~(random() * m.p.height)];
-        let at: XY = [(i % 400 / 400) * m.p.width + random()*40, (i % 20 / 20) * m.p.height + random()*40];
-        let ind = coord2ind(at, m.p.width);
-        let biome = m.biome[ind]
-        let icon = i % 2 ? biomeAnimal[biome] : biomeEmoji[biome];
-        let size = 1 + random();
-        let p: Poi = { at, icon, size };
-        pois.push(p)
-    }
 
-    let allTypes = [...biomeAnimal, ...biomeEmoji];
-    let fp: Poi[] = [];
 
-    for (let type of allTypes) {
-        let thisType = pois.filter(p => p.icon == type);
-        for (let i of [...thisType]) {
-            for (let j of [...thisType]) {
-                if (i != j && j.size && i.size && dist(i.at, j.at) < 50) {
-                    i.size += j.size;
-                    j.size = 0;
-                }
-            }
+
+
+
+export function lerpMaps(a: LayeredMap, b: LayeredMap, n: number, fields?: string[]) {
+    let c = {} as LayeredMap;
+    for (let k of (fields ?? Object.keys(a))) {
+        c[k] = new Float32Array(a[k].length);
+        let aa = a[k], bb = b[k]
+        for (let i in aa) {
+            c[k][i] = aa[i] * (1 - n) + bb[i] * n;
         }
-        fp.push(...thisType.filter(a=>a.size));
     }
-
-    console.log("fp", fp);
-
-    m.poi = fp;
+    return c
 }
+
+export function blendFull(a: LayeredMap, b: LayeredMap, n: number) {
+    console.time("blend");
+    let terrain = lerpMaps(a, b, n, ["dryElevation", "tectonic"]) as Terrain;
+    console.timeEnd("blend");
+    console.time("blendGen");
+    let m = generateMap({ ...a.p, averageTemperature: a.p.averageTemperature + Math.sin(n * 6.3) * 20 }, terrain);
+    console.timeEnd("blendGen");
+    return m;
+}
+
+export function blendFast(a: LayeredMap, b: LayeredMap, n: number) {
+    console.time("blend");
+    let blend = lerpMaps(a, b, n, ["elevation", "temperature", "humidity", "tectonic", "noise"]) as Terrain;
+    let m = { ...a, ...blend };
+    generateBiome(m);
+    generatePhoto(m);
+    console.timeEnd("blend");
+    return m;
+}
+
+
