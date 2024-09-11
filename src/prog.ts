@@ -1,10 +1,11 @@
 "use strict";
 
-import { initGame, mult, Poi, poiLeft, Recipe, recipes, Game, parsePedia, populate, travelToP, setLocalRecipes } from "./game";
+import { initGame, mult, Poi, poiLeft, Recipe, recipes, Game, parsePedia, populate, travelToP, setLocalRecipes, tryToUse, travelSteps, travelCost, travelWeight, recipeUseable, happiness, recipeGroupStartingWith } from "./game";
 import { scenario } from "./scenario";
 import {
   data2image, rescaleImage, generateMap, ShowMapF, LayeredMap, RGBA,
-  XY, coord2ind, blendFull
+  XY, coord2ind, blendFull,
+  MapParams
 } from "./worldgen";
 
 declare var main: HTMLCanvasElement, tooltip: HTMLDivElement, recdiv: HTMLDivElement, ps: HTMLDivElement;
@@ -156,15 +157,18 @@ let defaultSettings = {
   gameMapScale: 2,
   generatePhoto: 1,
   squareGrid: 0,
-};
+  noiseSeed: 0,
+  elevationCold: 0,
+  shading: true
+} as MapParams;
 
-let settings = {} as { [id: string]: number };
+export let settings = {} as MapParams;
 
 function init() {
   parsePedia()
 
   if (document.location.hash) {
-    settings = {};
+    settings = {} as MapParams;
     let records = document.location.hash
       .substr(1)
       .split("&")
@@ -183,21 +187,19 @@ function init() {
     settings = { ...defaultSettings };
 
   rebuildForm();
-  applySettings();
 
-  game = initGame();
+  applySettings();
+  game = initGame(settings.seed);
+  m = generateGameMap(0, settings);
   game.poi = populate(m)
   renderMap();
-  rescale();
-
-  document.onclick = e=>{
-    let rname = (e.target as HTMLButtonElement).dataset.rec;
-    if(rname){
-      let r = gam
-      console.log(rec);
-    }
-  }
+  render();
 }
+
+document.addEventListener("mousedown", e => {
+  tryToUse((e.target as HTMLButtonElement).dataset.rec);
+  render();
+});
 
 
 function applySettings() {
@@ -212,7 +214,7 @@ function applySettings() {
 
   saveSettings();
 
-  generate(settings);
+  //generate(settings);
 }
 
 window.onload = init;
@@ -302,7 +304,7 @@ function showMap(data: Float32Array | RGBA[], title: string, fun: ShowMapF, scal
 
 
 function updateTooltip(mouseAt: XY) {
-  let ind = coord2ind(mouseAt, settings.width);
+  let ind = coord2ind(mouseAt);
   tooltip.style.left = `${Math.min(window.innerWidth - 300, screenXY[0] + 20)}`;
   tooltip.style.top = `${Math.min(window.innerHeight - 300, screenXY[1] - 40)}`;
   tooltip.style.display = "grid";
@@ -327,7 +329,7 @@ document.onmousemove = (e) => {
   if (e.target == mainCanvas && e.buttons) {
     mapScroll[0] += move[0] * devicePixelRatio
     mapScroll[1] += move[1] * devicePixelRatio
-    rescale()
+    render()
   }
   let target = e.target as HTMLCanvasElement;
 
@@ -354,22 +356,26 @@ main.onwheel = (e) => {
   zoom += (e.deltaY > 0 ? -1 : 1) * 1 / 8;
   zoom = zoom < 0 ? 0 : zoom;
   console.log(zoom, mapScroll);
+  let half = settings.width / 2;
 
-  //let oldcx = mapScroll[0] + 400 * 2 ** old
-  //let newcx = mapScroll[1] + 400 * 2 ** zoom
 
-  //let dcenter = mapScroll[0] + 400) * 2**old - (mapScroll[1] + 400) * 2**zoom;
-  //let centerxold = mapScroll[0] + 400 * 2 ** old;
-
-  mapScroll[0] = (mapScroll[0] - 400) * 2 ** (zoom - old) + 400;
-  mapScroll[1] = (mapScroll[1] - 400) * 2 ** (zoom - old) + 400;
-
+  mapScroll[0] = (mapScroll[0] - half) * 2 ** (zoom - old) + half;
+  mapScroll[1] = (mapScroll[1] - half) * 2 ** (zoom - old) + half;
 
   e.preventDefault()
   e.stopPropagation()
-  rescale()
+  render()
 }
 
+function poiText(i: number) {
+  let p = game.poi[i];
+  let ts = travelSteps(m, p, game.home)
+  let tc = travelCost(m, p, game.home)
+  return `<div class=poi id=poi${i}>
+${p.kind}<center style=color:rgb(${15 * p.temp - 400},50,${-20 * p.temp + 100})>${~~poiLeft(p)}
+${!game.home || p==game.home?"":`<br/>${recipeToText(ts)}<br/>${recipeToText(tc)}`}</center>
+</div>`
+}
 
 function renderMap() {
 
@@ -377,36 +383,39 @@ function renderMap() {
   mainCanvas && main.removeChild(mainCanvas);
 
   showMap(m.photo, "photo", (v) => v as any, undefined, i => Math.max(1, ~~(m.elevation[i] * 20) * 2));
-  if (game) {
-    let s = ""
-    for (let i in game.poi) {
-      let p = game.poi[i];
-      s += `<div 
-class=poi 
-id=poi${i}
->${p.kind}<center style=color:rgb(${15 * p.temp - 400},50,${-20 * p.temp + 100})>${~~poiLeft(p)}</center></div>`
-    }
-    ps.innerHTML = s;
-  }
 
   console.timeEnd("draw");
-  rescale();
+  render();
 }
 
 window["poiOver"] = e => {
   console.log(e);
 }
 
-function recipeToText(r) {
-  return r ? Object.keys(r).map(k => `${r[k] == 1 ? '' : r[k]}${k}`).join("+") : ""
+
+export function fix(n) {
+  return parseFloat(Number(n).toFixed(2))
 }
 
-export function rescale() {
+function recipeToText(r) {
+  return r ? Object.keys(r).map(k => `${fix(r[k])}${k}`).join(" ") : ""
+}
+
+export function render() {
   if (!game)
     return;
 
   //mainCanvas.style.transformOrigin = `${mapScroll[0]}px ${mapScroll[1]}px`
   mainCanvas.style.transform = `translate(${mapScroll[0]}px, ${mapScroll[1]}px) scale(${2 ** zoom})`
+
+  let s = ""
+  for (let i in game.poi) {
+    s += poiText(i as any as number);
+  }
+
+  ps.innerHTML = s;
+  let half = settings.width / 2;
+
   for (let i in game.poi) {
     let p = game.poi[i];
     let d = document.querySelector(`#poi${i}`) as HTMLDivElement;
@@ -415,18 +424,46 @@ export function rescale() {
       d.style.left = `${(p.at[0] * devicePixelRatio * (2 ** zoom) + mapScroll[0] - size / 2)}px`;
       d.style.top = `${(p.at[1] * devicePixelRatio * (2 ** zoom) + mapScroll[1] - size / 2)}px`;
       d.style.fontSize = `${size}px`
-      d.dataset.cur = (p == game.home) ? '1' : '';
+      d.dataset.cur = p == game.home;
       d.onmouseover = () => { poiPointed = p; };
       d.onmouseleave = () => { poiPointed = undefined; };
-      d.onclick = () => { travelToP(p) }
+      d.onmousedown = () => {
+        travelToP(p)
+        render()
+        mapScroll[0] = (- p.at[0] * 2 ** zoom + half) * devicePixelRatio
+        mapScroll[1] = (- p.at[1] * 2 ** zoom + half) * devicePixelRatio
+      }
     }
   }
 
   setLocalRecipes()
+  game.bonus["💗"] = happiness();
+
+  let barCont = {'👨‍👩‍👦‍👦':game.pop, '🏋':travelWeight(), '📅': fix(game.date * scenario.wpy), 
+    ...game.bonus,
+    ...game.store}
 
   recdiv.innerHTML =
-    "👨‍👩‍👦‍👦" + game.pop + "|" + Object.keys(game.store).map(k => `${k}${game.store[k]}`).join("|") + "<br/>" +
-    Object.values(game.cr).map(r => `<button data-rec="${r.name}" >${`${r.name} ${recipeToText(r.from)}➨${recipeToText(r.to)}`}</button>`).join("");
+    "<div id=res>" +
+    Object.keys(barCont).map(k => ([k,~~barCont[k]])).map(a => 
+      `<span onmousedown="give('${a[0]}')">${a.join("<br/>")}</span>`
+    ).join("") + "</div>" +
+    Object.values(game.cr).map(r => {
+      let to = recipeToText(r.to);
+      let rg = recipeGroupStartingWith[r.name];
+      let known = r.cost == 0;
+      return (rg?`<div>${rg}</div>`:"")+
+`<button data-sel=${game.sel.has(r.name)} data-rec="${r.name}" data-use="${known && recipeUseable(r.name)}" >
+<div class=rb>⚗️</div> 
+${!known?`<div class=un>UNKNOWN</div>`:''}
+${`<div class=r><div>${r.name}</div><div>${r.cost}⚗️↩${Object.keys(r.bonus)}</div></div>
+<span class=rec>${recipeToText(r.from)}${to ? '🡢 ' + to : ''}</span>`}
+</button>`}).join("");
+}
+
+window["give"] = a=>{
+  game.store[a] += 100;
+  render()
 }
 
 function generate(params) {
@@ -436,8 +473,22 @@ function generate(params) {
 
   renderMap();
 
-  //if (params.generateTileMap)  generateTileMap(generatedMap);
-
   console.timeEnd("generation total");
+}
+
+export function generateGameMap(date: number) {
+  let before = ~~date;
+  if (before != date)
+    date = before + ~~((date % 1) * 13) / 13;
+  if (game.maps[date])
+    return game.maps[date];
+  if (before == date) {
+    game.maps[date] = generateMap({ ...settings, seed: game.seed + date });
+    return game.maps[date]
+  }
+  let [a, b] = [generateGameMap(before, settings), generateGameMap(before + 1, settings)];
+  let blend = blendFull(a, b, date - before);
+  console.timeEnd("generation total");
+  return blend;
 }
 

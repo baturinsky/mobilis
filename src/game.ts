@@ -1,18 +1,29 @@
-import { game, rescale } from "./prog";
-import { LAKE, OCEAN, scenario } from "./scenario";
-import { clamp, coord2ind, dist, LayeredMap, random, XY } from "./worldgen";
+import { game, render } from "./prog";
+import { categories, LAKE, OCEAN, scenario } from "./scenario";
+import { clamp, coord2ind, dist, LayeredMap, lerp, lerpXY, random, XY } from "./worldgen";
 
-export type Recipe = { name: string, from: { [id: string]: number }, to: { [id: string]: number } }
+export type Recipe = { name: string, from: { [id: string]: number }, to: { [id: string]: number }, cost: number, bonus: { [id: string]: number } }
 
 export let dict: { [id: string]: { name: string, category: string } }, recipes: { [id: string]: Recipe }, mult = {};
 
 export type Game = {
     store: { [id: string]: number }
+    bonus: { [id: string]: number }
     pop: number
     home: Poi | undefined
+    /**local recipes */
     cr: { [id: string]: Recipe }
+    tech: { [id: string]: Recipe }
+    /**local deposit icon */
     deposit: string
+    /**selecte options */
+    sel: Set<string>
+    '🏃': string,
+    '⚓': string,
     poi: Poi[]
+    date: number
+    seed: number
+    maps: LayeredMap[]
 };
 
 export type Poi = {
@@ -30,7 +41,7 @@ export function poiLeft(p: Poi) {
 }
 
 function generatePoi(m: LayeredMap, at: XY) {
-    let i = coord2ind(at, m.p.width);
+    let i = coord2ind(at);
     let biome = m.biome[i]
     let kind: string;
     let size = 1 + random();
@@ -65,58 +76,100 @@ function strToObj(s: string) {
     let c = {};
     for (let i = 0; i < a.length; i += 2)
         c[a[i + 1]] = a[i];
-    console.log(c);
     return c
 }
 
+export let recipeGroupStartingWith = {};
+
 function parseRecipes(s: string, short = false) {
+    let groupName:string|undefined;
     return Object.fromEntries(s.split("\n").map(v => {
-        let [name, ...etc] = v.split(/[:>]/);
+        if(v[0] == "="){
+            groupName = v.slice(1);            
+            return null as any;
+        }
+
+        let cost = Number(v[0]);
+
+        let bonus = {}
+        let [name, ...etc] = v.slice(cost >= 0 ? 1 : 0).split(/[:>]/);
+        if(groupName){
+            recipeGroupStartingWith[name] =  groupName;
+            groupName = undefined;
+        }
         if (!etc)
             debugger
-        let [from, to] = etc.map(strToObj).filter(v => v)
-        return short ? [name, from] : [name, { from, to, t: v, name }]
-    })) as { [id: string]: Recipe }
+        let [from, to] = etc.map(strToObj).map(a => {
+            for (let k in a) {
+                if(!categories.BNS[k] && !categories.WLD[k])
+                    bonus[k] = 1;
+                if (a[k] == 0) {
+                    delete a[k]
+                }
+            }
+            return a
+        }).filter(v => v)
+        return short ? [name, from] : [name, { from, to, t: v, name, cost, bonus }]
+    }).filter(v => v)) as { [id: string]: Recipe }
 }
 
 export function parsePedia() {
     let category: string;
     dict = Object.fromEntries(scenario.d.split("\n").map(v => {
-        if (v[0] == "=")
+        if (v[0] == "=") {
             category = v.slice(1);
-        else {
+            categories[category] = {};
+        } else {
             let [k, name] = v.split(" ")
-
-            return [k, { name, category }]
+            categories[category][k] = 1;
+            return [k, name]
         }
     }).filter(a => a) as any);
     for (let m in scenario.m) {
         mult[m] = parseRecipes(scenario.m[m], true);
     }
+
     recipes = parseRecipes(scenario.rr);
-    console.log(dict);
-    console.log(recipes);
-    console.log(mult);
+    //console.log(dict);
+    //console.log(recipes);
+    //console.log(mult);
 }
 
 
 
 //console.log(recipes, dict);
 
-export function initGame() {
+export function initGame(seed: number) {
     let game = {
         pop: 100,
-        store: Object.fromEntries(Object.keys(dict).filter(k => ["RESOURCES", "TOOLS"].includes(dict[k].category)).map(k => [k, 0]))
+        store: Object.fromEntries(Object.keys(dict).filter(k => categories.RES[k] || categories.TLS[k]).map(k => [k, 0])),
+        bonus: Object.fromEntries(Object.keys(categories.BNS).map(k => [k, 0])),
+        sel: new Set(["Walk", "Swim"]),
+        '🏃': "Walk",
+        '⚓': "Swim",
+        date: 0,
+        seed,
+        maps: [] as LayeredMap[],
     } as Game;
-    return game
+    return game    
 }
+
+export function happiness(){
+    let h = game.store.food>0?0:-10;
+    for(let k in game.store){
+        let v = game.store[k];
+        let b = (v/100)**0.8;
+        h += b;
+    }
+    return h;
+}
+
 
 export function travelToP(p: Poi) {
     delete game.store[game.deposit];
     game.home = p;
     game.deposit = p.kind;
     game.store[p.kind] = poiLeft(p);
-    rescale()
 }
 
 export function populate(m: LayeredMap) {
@@ -154,47 +207,167 @@ export function populate(m: LayeredMap) {
     return fp
 }
 
-function recipeMax(r: Recipe, goal: number) {
+/**Maximum of what of this recipe can be made. If there is goal, then it will not try make more product (should be only one) than goal */
+function recipeMax(r: Recipe, goal?: number) {
     let max = 1e12;
-    if (goal) {
+    if (goal != null) {
         let to = Object.values(r.to)[0];
         max = goal / to;
     }
     for (let k in r.from) {
         max = Math.min(game.store[k] / r.from[k], max)
     }
+    return max
 }
 
-function recipeUse(r: Recipe, m: number) {
+/**Apply recipe uage result */
+function recipeUse({ used, made }) {
+    for (let k in used) {
+        game.store[k] -= used[k];
+        if (game.deposit == k && game.home) {
+            game.home.taken += used[k];
+        }
+    }
+    for (let k in made) {
+        game.store[k] = (game.store[k] || 0) + made[k];
+    }
+}
+
+export function trimObj(a) {
+    for (let k in { ...a })
+        if (!a[k])
+            delete a[k]
+    return a
+}
+
+/**How many resources will be used and made, accounting for TOOLS multiplier */
+function recipeUsage(r: Recipe, m: number) {
+    let used = {}, made = {};
     for (let k in r.from) {
-        let v = r.from[k];
-        let useMult = dict[k].category == "TOOLS" ? 0.1 : 1;
-        game.store[k] -= v * m * useMult;
+        let v = r.from[k] * m;
+        let useMult = categories.TLS[k] ? 0.1 : 1;
+        used[k] = v * useMult;
     }
     for (let k in r.to) {
-        let v = r.from[k];
-        game.store[k] = (game.store[k] || 0) + v * m;
+        let v = r.to[k] * m;
+        let sk = scenario.aka[k] ?? k;
+        made[sk] = v
     }
+    return { used, made }
 }
 
-export function setLocalRecipes(){
+export function setLocalRecipes() {
     let rr: { [id: string]: Recipe } = JSON.parse(JSON.stringify(recipes));
     for (let r of Object.values(rr)) {
-      let special = Object.keys(scenario.m).find(a => r.from[a])
-      if (special && game.home) {
-        let m = mult[special][game.home.kind];
-        if (m) {
-          for (let k in r.to) {
-            if (m[k]) {
-              r.to[k] = r.to[k] * m[k];
+        let special = Object.keys(scenario.m).find(a => r.from[a])
+        if (special && game.home) {
+            let m = mult[special][game.home.kind];
+            if (m) {
+                for (let k in r.to) {
+                    if (m[k]) {
+                        r.to[k] = r.to[k] * m[k];
+                    }
+                }
+                r.from[game.home.kind] = r.from[special];
+                delete r.from[special]
             }
-          }
-          r.from[game.home.kind] = r.from[special];
-          delete r.from[special]
         }
-      }
     }
-    
-    game.cr = rr;    
+
+    game.cr = rr;
 }
 
+const travelTypes = ["⚓", "🏃"];
+
+export function tryToUse(rname?: string) {
+    if (rname) {
+        let r = game.cr[rname];
+
+        for (let travelType of travelTypes) {
+            if (r.to[travelType]) {
+                let tt = game[travelType];
+                game.sel.delete(tt);
+                game.sel.add(r.name)
+                game[travelType] = r.name
+                return
+            }
+        }
+
+        let v = recipeMax(r)
+        if (v > 0) {
+            v = Math.min(v, game.pop);
+            let usage = recipeUsage(r, v)
+            recipeUse(usage);
+            advanceTimeByWeeks(v / game.pop);
+        }
+    }
+}
+
+export function advanceTimeByWeeks(weeks:number){
+    game.date += weeks / scenario.wpy;    
+    render()
+}
+
+export function recipeUseable(rname: string){
+    let r = game.cr[rname];
+    return recipeMax(r)>0;
+}
+
+/**How many steps (weeks of foot travel) it takes to travel from a to w */
+export function travelSteps(m: LayeredMap, a: Poi, b?: Poi) {
+    if (!b)
+        return [0, 0];
+    let d = dist(a.at, b.at);
+    let w = 0, l = 0;
+    for (let i = 0; i < d; i++) {
+        let at = lerpXY(a.at, b.at, i / d)
+        let ind = coord2ind(at)
+        if (m.elevation[ind] < 0)
+            w += scenario.dm;
+        else
+            l += scenario.dm;
+    }
+    return { '🏃': l, '⚓': w } as { '🏃': number, '⚓': number };
+}
+
+function sumObj(a, b) {
+    return Object.fromEntries(Object.keys({ ...a, ...b }).map(k => [k, (a[k] || 0) + (b[k] || 0)]));
+}
+
+export function travelWeight() {
+    let v = game.pop;
+    for (let k in game.store) {
+        if (game.deposit != k)
+            v += game.store[k] * 0.1;
+    }
+    return v;
+}
+
+/**Resources and time to travel */
+export function travelCost(m: LayeredMap, a: Poi, b?: Poi) {
+    let tw = travelWeight();
+    let ts = travelSteps(m, a, b);
+    let landSteps = ts['🏃'], waterSteps = ts['⚓'];
+    let [landRecipe, waterRecipe] = [recipes[game['🏃']], recipes[game['⚓']]];
+    for (let r of [landRecipe, waterRecipe]) {
+        if (recipeMax(r) < tw)
+            return { fail: 1 };
+    }
+
+    landSteps *= tw;
+    waterSteps *= tw;
+
+    //if(landSteps>0)        debugger
+
+    let [landTime, waterTime] = [recipeMax(landRecipe, landSteps), recipeMax(waterRecipe, waterSteps)]
+    let landResources = recipeUsage(landRecipe, landTime),
+        waterResources = recipeUsage(waterRecipe, waterTime);
+    let sum = sumObj(landResources.made, waterResources.made);
+    if (sum['🏃'] >= landSteps - .1 && sum['⚓'] >= waterSteps - .1) {
+        let so = sumObj(landResources.used, waterResources.used);
+        so.w = (landTime + waterTime) / game.pop;
+        return trimObj(so);
+    } else {
+        return { fail: 2 };
+    }
+}

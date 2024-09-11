@@ -1,15 +1,15 @@
-"use strict";(()=>{function se(e,n){let t;switch(n){case 0:return t=[[0,-1],[1,0],[0,1],[-1,0]].map(([r,o])=>o*e+r),[t,t];case 4:return t=[[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]].map(([r,o])=>o*e+r),[t,t];case 1:return[[[0,-1],[1,0],[0,1],[-1,1],[-1,0],[-1,-1]],[[1,-1],[1,0],[1,1],[0,1],[-1,0],[0,-1]]].map(r=>r.map(([o,a])=>a*e+o));case 2:return t=[[1,-1],[2,0],[1,1],[-1,1],[-2,0],[-1,-1]].map(([r,o])=>o*e+r),[t,t];case 3:return t=[[0,-1],[1,0],[1,1],[0,1],[-1,0],[-1,-1]].map(([r,o])=>o*e+r),[t,t]}}var G={d:`=DEPOSITS
+"use strict";(()=>{function Me(e,r){let t;switch(r){case 0:return t=[[0,-1],[1,0],[0,1],[-1,0]].map(([n,o])=>o*e+n),[t,t];case 4:return t=[[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]].map(([n,o])=>o*e+n),[t,t];case 1:return[[[0,-1],[1,0],[0,1],[-1,1],[-1,0],[-1,-1]],[[1,-1],[1,0],[1,1],[0,1],[-1,0],[0,-1]]].map(n=>n.map(([o,i])=>i*e+o));case 2:return t=[[1,-1],[2,0],[1,1],[-1,1],[-2,0],[-1,-1]].map(([n,o])=>o*e+n),[t,t];case 3:return t=[[0,-1],[1,0],[1,1],[0,1],[-1,0],[-1,-1]].map(([n,o])=>o*e+n),[t,t]}}function te(e,r,t){return e*(1-t)+r*t}function H(e,r,t){return t<e?e:t>r?r:t}function ve(e){for(let r of[0,1,2])e[r]=H(0,255,e[r])}var D=6;function Q(e,r){return((e[0]-r[0])**2+(e[1]-r[1])**2)**.5}function Se(e,r,t){return[te(e[0],r[0],t),te(e[1],r[1],t)]}function w(){let e=Math.sin(D)*1e4;return D=(D+Math.E)%1e8,e-Math.floor(e)}function N([e,r],t=d.width){return~~e+~~r*t}function U(e){return e.getContext("2d")}function G(e,r){let t=document.createElement("canvas");t.width=e,t.height=r,t.style.width=`${t.width*devicePixelRatio}px`,t.style.height=`${t.height*devicePixelRatio}px`;let n=U(t);return{canvas:t,ctx:n}}function _(e){let n=U(e).getImageData(0,0,e.width,e.height).data,o=new Float32Array(n.length/4);for(let i=0;i<n.length;i++)o[i]=n[i*4+3]/255;return o}function et(e,r,t=5e3,n=100,o=.01,i=!0){let{canvas:a,ctx:l}=G(e,r);if(i){let m=l.createRadialGradient(0,0,0,0,0,1);m.addColorStop(0,`rgba(255, 255, 255, ${o})`),m.addColorStop(1,"rgba(255, 255, 255, 0)"),l.fillStyle=m}else l.fillStyle=`rgba(255, 255, 255, ${o})`;for(let m=0;m<t;m++){let f=[...Array(3)].map(()=>w()),[p,c]=[f[0]*e,f[1]*r],h=Math.pow(f[2],2)*n;l.save(),l.translate(p,c),l.rotate(w()*Math.PI),l.scale(h*(.5+w()),h*(.5+w())),l.beginPath(),l.arc(0,0,1,0,Math.PI*2),l.fill(),l.restore()}return a}function Te(e,r){let{canvas:t,ctx:n}=G(e.width,e.height);return n.filter=r,n.drawImage(e,0,0),t}function we(e,r=.5,t=1e3){if(!e)debugger;let n=e.length,o=[...Array(t)].map(()=>e[Math.floor(w()*n)]);return o=o.sort(),o[Math.floor(r*o.length)]}function tt(e,r=1e3){let t=e.length,n=[...Array(r)].map(()=>e[Math.floor(w()*t)]),o=0;for(let i of n)i>o&&(o=i);return e.map(i=>i/o)}var z=({width:e,height:r},t,n,o,i)=>_(Te(et(e,r,n,Math.sqrt(e*e+r*r)*o,i),`blur(${t}px)`));function rt(e){let{width:r,height:t,seed:n,noiseSmoothness:o,tectonicSmoothness:i,noiseFactor:a,crustFactor:l,tectonicFactor:m,pangaea:f}=e;D=n;let p=r*t;console.time("noise");let c=z(e,o,3e3,.15,.03),h=z(e,i,2e3,.15,.03),x=z(e,i,2e3,.15,.03);console.timeEnd("noise"),console.time("main");let y=we(h,.5),M=h.map((v,g)=>(.2/(Math.abs(y-v)+.1)-.95)*(x[g]-.2)*2),u=h.map((v,g)=>5+c[g]*a+h[g]*l+M[g]*m+-f*(Math.abs(g/p-.5)+Math.abs(g%r/r-.5)));console.timeEnd("main"),console.time("normalize");for(let v=4;v--;)for(let g=r;g<u.length;g++)for(let P of[-2,2,-r*2,r*2])u[g]+=((u[g+P]||0)-u[g])*.15;let b=tt(u);return console.timeEnd("normalize"),{dryElevation:b,tectonic:M,p:e}}function re(e,r){return r??=rt(e),nt(e,r)}function nt(e,r){let{width:t,height:n,averageTemperature:o,erosion:i,riversShown:a,randomiseHumidity:l,noiseSmoothness:m,seaRatio:f,flatness:p,noiseSeed:c,elevationCold:h}=e;D=c;let x=z(e,m,3e3,.15,.01),{dryElevation:y,tectonic:M}=r,u=t*n,b=we(y,f),v=y.map((S,$)=>S<b?-Math.pow(1-S/b,.35):Math.pow((S-b)*(.5+M[$]*.5)/(1-b),1+2*p)),g=v.map((S,$)=>Math.cos((Math.abs(.5-$/u)*4+.85)*Math.PI)/(S<0?1:1+5*S*S));console.time("windSmoothing"),g=_(Te(q(g,t,S=>[0,0,0,127*(S+1)]),"blur(3px)")).map(S=>S*2-1),console.timeEnd("windSmoothing");let P=lt({width:t,height:n,elevation:v,tectonic:M,erosion:i,riversShown:a}),E=at({width:t,elevation:v,wind:g,steps:400});l&&(E=E.map((S,$)=>Math.max(0,S+Math.sin(x[$]*50)/10-v[$]*.2)));let O=v.map((S,$)=>o+25-100*Math.abs(.5-$/u)/(.7+.6*E[$])-Math.max(0,S)*h),k={tectonic:M,dryElevation:y,elevation:v,noise:x,rivers:P,wind:g,temperature:O,humidity:E,p:e,poi:[]};return k.biome=ot(k),k.photo=it(k),k}function ot(e){console.time("biome");let r=e.temperature.map((t,n)=>{if(e.elevation[n]<-0)return J;if(e.rivers[n])return B;let i=1+e.p.biomeScrambling*Math.sin(e.noise[n]*100),a=ke[~~H(0,5,e.humidity[n]*4.5*i)][~~H(0,3,t*i/10+1)];return e.elevation[n]>.4&&(a=oe),a});return console.timeEnd("biome"),r}function it(e){let{humidity:r,elevation:t,temperature:n,tectonic:o,noise:i,rivers:a,biome:l}=e,{width:m,shading:f}=e.p,p=[...r],c=[...r],h;console.time("photo");let x;function y(M,u){if(M)for(let b of[0,1,2])x[b]=te(x[b],M[b],u)}return h=[...r].map((M,u)=>{let b=t[u];if(b<0)return[-(b**2)*1e3+100,-(b**2)*500+150,-(b**2)*300+150,255];{x=[n[u]*15-M*700,150-M*150,n[u]*8-M*500,255],ve(x);let v=(b+o[u])*2-1;v>0&&y([64,0,0,255],Math.min(1.5,v**2));let g=(1+Math.sin((i[u]*3+o[u])*100))*(1+w());g=(Math.sin(i[u]*100)+.5)*g**2*.05,y([32,32,32],g),p[u]=0,a[u]&&(x=[0,100,150+50*a[u],255]);for(let P of[1,2,3])for(let E of[1,m,-1,-m,0])y(Pe[l[u+E*P]],.05);if(n[u]<0&&y([500,500,500],-n[u]*.03),ve(x),f){let P=0;for(let O=-2;O<=2;O++)for(let k=-2;k<=2;k++)P+=t[u+O+m*k]*(Math.sign(O)+Math.sign(k));let E=t[u+1+m]+t[u+m]+t[u+1]-b-t[u-m]-t[u-1]+P*.05;a[u]==0&&a[u+m]!=0&&(E-=.1),y([500,500,260],-E),c[u]=E}return x}}),console.timeEnd("photo"),h}function Ae(e,r,t=20){let n=e.length/r,o=q(e,r,(l,m)=>[0,0,0,l<=0?100:0]),i=G(r,n),a=i.ctx;return a.beginPath(),a.lineWidth=r/8,a.rect(0,0,r,n),a.stroke(),a.filter=`blur(${t}px)`,a.filter="opacity(50%)",a.drawImage(o,0,0),{humidityImage:o,wetness:i.canvas}}function at({width:e,elevation:r,wind:t,steps:n}){console.time("humidity");let o=r.length/e,i=Math.sqrt(e*e+o*o),{humidityImage:a,wetness:l}=Ae(r,e,10),m=i/10;for(let p=0;p<n;p++){let c=[p%100/100*e,p%10/10*o],h=t[N(c)],x=[c[0]+h*.3*e/8,c[1]+Math.abs(h)*.5*o/12];l.getContext("2d")?.drawImage(l,c[0],c[1],m,m,x[0],x[1],m,m)}U(a).filter="blur(30px)",U(a).drawImage(l,0,0,e,o,0,0,e,o);let f=_(a);return console.timeEnd("humidity"),f}function lt({width:e,height:r,elevation:t,erosion:n,riversShown:o}){console.time("rivers");let{wetness:i}=Ae(t,e,100),a=_(i),l=t.map((p,c)=>1-p-a[c]*.3),m=new Float32Array(e*r),f=Me(e,4)[0];for(let p=0;p<n+o;p++){let c=p*12345%t.length,h=[],x=1e3;for(;t[c]>-.1&&x-- >0;){p>n&&(m[c]+=1);let y=l[c],M=0,u=1e6;for(let b of f)l[c+b]<=u&&(M=c+b,u=l[M]);if(u<y){let b=(l[c]-u)*.01;for(let v of[0,0,-1,1,-e,e])t[c+v]-=b,l[c+v]-=b}else l[c]=u+.05;h.push(c),c=M}}for(let p in t)t[p]>-.2&&t[p]<0&&(t[p]=t[p]>-.1?.01:t[p]*2+.2),t[p]>0&&(t[p]*=1+w()*.1);return console.timeEnd("rivers"),m}function Re(e){let r=[];for(let t in e)r[t]=e[t];return r}function Le(e){let r=parseInt(e,16);return[Math.floor(r/256)*16,Math.floor(r/16)%16*16,r%16*16,256]}function q(e,r,t,n){let o=e.length/r,{canvas:i,ctx:a}=G(r,o),l=a.createImageData(r,o);if(!l.data||!e)debugger;for(let m=0;m<e.length;m++){let f=0,p=t?t(e[m],m)??0:[0,0,0,e[m]];l.data.set(p,m*4)}return a.putImageData(l,0,0),i}function Ee(e,r,t){let{canvas:n,ctx:o}=G(r,t);return o.drawImage(e,0,0,e.width,e.height,0,0,r,t),n}function st(e,r,t,n){let o={};for(let i of n??Object.keys(e)){o[i]=new Float32Array(e[i].length);let a=e[i],l=r[i];for(let m in a)o[i][m]=a[m]*(1-t)+l[m]*t}return o}function ne(e,r,t){console.time("blend");let n=st(e,r,t,["dryElevation","tectonic"]);console.timeEnd("blend"),console.time("blendGen");let o=re({...e.p,averageTemperature:e.p.averageTemperature+Math.sin(t*6.3)*20},n);return console.timeEnd("blendGen"),o}var F={},A={wpy:169,dm:.1,d:`=DEP
 🏔️ ores
 ⬛ coal
 🛢️ oil
 💧 water
 🗿 relic
-=PLANTS
+=PLNT
 🌿 grass
 🌲 taiga
 🌳 forest
 🌴 jungles
-=WILDLIFE
+=ANM
 🐏 ram
 🐂 yak
 🐎 mustang
@@ -17,74 +17,112 @@
 🐺 wolves
 🐗 hogs
 🐅 tigers
-=RESOURCES
+=RES
 👖 fabric
 🪵 wood
 🍎 food
 ⛽ fuel
 📙 book
-=TOOLS
+=TLS
 🛠️ tools
 ⛺ housing
 🛷 wagons
 🐴 horses
 ⚙️ engines
-🗡️ weapons`,st:"Foraging;Walking;Sticks",rr:`Foraging:1🍃>1🍎
-Walking:>🏃1
-Hunting:1🐾>1🍎1👖
-Sticks:1🍃>1🪵
-Mining:1🛠️1🏔️>1🪨
-Axes:1🍃1🛠️0.1🪨>3🪵
-Writing:>1📙
-Parchment:2👖>2📙
-Wigwam:1🪵3👖>⛺
-Paper:1🪵1🛠️>4📙
-Printing:1🪵2🛠️>10📙
-Archeology:1🗿1🛠️>30📙
-Tools:1🪵>1🛠️
-Metal Working:1🪵1🪨>1🛠️
-Rifles:1⚙️1⛽1🪨>1🏹
-Alloys:1⚙️1⛽1🪨>1⛺
-Cars:1⚙️1⛽1🪨>1🛒
-Hunting bows:3🐾1🏹>3🍎3👖
-Bows:>1🏹
-Traps:2🐾1🛠️>2🍎2👖
-Animal Husbandry:10🌿>10🍎
-Farms:3🌿>5🍎
-Plantations:3🌿>3👖
-Firewood:1🪵>1⛽
-Coal:1⬛>5⛽
-Drills:1⚙️⛽1⬛>10⛽
-Oil:1⚙️1⛽1🛢️>20⛽
-Greenhouse:1⛺1⛽>5🍎
-Fishing Nets:1🛠️1🐠>5🍎
-Whaling:1⚓1🛠️1🐋>10🍎
-Dog Taming:0.05🥄0.2🦊0.2💗
-Cat Taming:0.03🥄-0.2🗑️0.2💗
-Pottery:-0.2🗑️
-Conservation:-0.3🗑️
-Cooking:-0.1🗑️0.5💗🍎
-Mapmaking:0.25🔭
-Astronomy:0.25🔭
-Compass:0.25🔭
-Optics:0.25🔭
-Horse Herding:3🌿>1🐴
-Carts:1🛷>2🏃
-Horseback Riding:1🐴1🛷>4🏃
-Cars:1⚙️1⛽1🛷>10🏃
-Steam:1⚙️1⛽1🛷>10⚓
-Sails:1👖1🛷>3⚓`,atc:"🐏,🐂,🐂,🐎,🐪,🐏,🐺,🐗,🐗,🐅","🐾":`🐏:1🍎3👖
+🏹 weapons
+=BNS
+🥄 food consumption
+🔭 visibility range
+🗑️ food spoilage
+🎯 hunting bonus
+🍲 food happiness
+💗 happiness
+⚗️ research focus
+=WLD
+🐾 animals
+🍃 plants
+🌾 cropss
+=MOV
+🏃 walk
+⚓ swim
+=CALAMITY
+👹 goblin
+☣️ taint
+🌋 fracture`,st:"Foraging;Walking;Sticks",aka:{"🌾":"🍎"},rr:`=Land travel method
+0Walk:>1🏃
+0Ride:1🐴1🛷>4🏃0🐎0🐪
+0Drive:1⚙️1⛽1🛷>10🏃
+=Sea travel method
+0Swim:>0.1⚓
+0Sail:0.1👖1🛷>3⚓
+0Boat:1⚙️1⛽1🛷>10⚓
+=Jobs
+0Forage:1🍃>3🍎
+0Pick Sticks:1🍃>1🪵
+1Axe:1🍃1🛠️.1🪨>3🪵
+2Herd:10🍃>10🌾0🐂0🐗
+2Farm:3🍃>5🌾
+2Plantation:3🍃>3👖
+0Hunt:1🐾>3🍎1👖
+1Bow:3🐾1🏹>10🍎3👖
+1Trap:2🐾1🛠️>5🍎2👖
+0Fish:1🐠>10🍎
+1Fishing nets:1🛠️1🐠>15🍎
+3Whaling:1⚓1🛠️1🐋>30🍎
+1Tools:1🪵>1🛠️
+1Sharp Sticks:1🪵>.3🏹
+1Wheel:3🪵>1🛷
+1Wigwam:1🪵3👖>1⛺
+1Dig:1🛠️1🏔️>1🪨
+3Mine:1⚙️1⛽1🏔️>10⛽
+3Firewood:1🪵>1⛽
+3Coal:1⚙️1⛽1⬛>10⛽
+4Oil:1⚙️1⛽1🛢️>20⛽
+1Write:>.1📙0👖0🪵
+2Parchment:2👖>.2📙
+3Paper:1🪵1🛠️>.4📙
+4Print:1🪵2🛠️>1📙
+4Archeology:1🗿1🛠️>3📙
+1Horses:3🍃>1🐴0🐎0🐪
+2Metal Working:1🪵1🪨>3🛠️
+4Rifles:1⚙️1⛽1🪨>3🏹
+4Engines:3🛠️3🪨>1⚙️
+3Alloys:1⚙️1⛽1🪨>3⛺
+4Cars:1⚙️1⛽1🪨>1🛷
+4Greenhouse:1⛺1⛽>15🍎
+=Calamities
+4Kill goblins:1🏹1👹>1📙
+4Burn taint:1🛠️1⛽1☣️>1📙
+4Close fracture:1⚙️1⛽1🌋>1📙
+=Permanent bonuses
+1Tame Dogs:.05🥄.2🎯1💗0🐺
+1Tame Cats:.03🥄-.2🗑️1💗0🐅
+1Pottery:-.2🗑️0🍎
+2Conservation:-.3🗑️0🍎
+2Cooking:-.1🗑️.5🍲0🍎
+1Mapmaking:.25🔭0🏃
+2Astronomy:.25🔭0🏃
+3Compass:.25🔭0🏃
+4Optics:.25🔭0🏃
+1Research Focus:1⚗️0📙`,atc:"🐏,🐂,🐂,🐎,🐪,🐏,🐺,🐗,🐗,🐅",m:{"🐾":`🐏:1🍎3👖
 🐂:3🍎1👖
 🐎:2🍎1👖
 🐪:1🍎1👖
 🐺:1🍎1👖
 🐗:4🍎1👖
 🐅:1🍎2👖
-🐠:3🍎`,"🍃":`🌿:2.5🍎0.5🪵1🌾
-🌲:1🍎2🪵0.3🌾
-🌳:2🍎1🪵0.5🌾
-🌴:1.5🍎1.5🪵0.3🌾`},me=1,_=2,q=3,J=4,V=5,K=6,$=7,Z=8,pe=9,$e=10,ee=11,ce=12,N=13,te=14,Ce=15,B=16,ne=17,ue=[[q,ce,J,me],[q,V,_,J],[ee,V,_,Z],[ee,N,Z,$],[K,N,$,$],[K,N,$,pe]],de=fe({[me]:"fa0",[_]:"4f4",[J]:"ff8",[q]:"cca",[V]:"ad4",[K]:"064",[$]:"0a0",[Z]:"060",[pe]:"084",[$e]:"880",[ee]:"fff",[ce]:"caa",[N]:"0a6",[te]:"884",[Ce]:"ff0"}).map(ge);be();function ke(e,n,t){return e*(1-t)+n*t}function H(e,n,t){return t<e?e:t>n?n:t}function he(e){for(let n of[0,1,2])e[n]=H(0,255,e[n])}var C=6;function Oe(e,n){return((e[0]-n[0])**2+(e[1]-n[1])**2)**.5}function T(){let e=Math.sin(C)*1e4;return C=(C+Math.E)%1e8,e-Math.floor(e)}function U([e,n],t){return~~e+~~n*t}function z(e){return e.getContext("2d")}function O(e,n){let t=document.createElement("canvas");t.width=e,t.height=n,t.style.width=`${t.width*devicePixelRatio}px`,t.style.height=`${t.height*devicePixelRatio}px`;let r=z(t);return{canvas:t,ctx:r}}function W(e){let r=z(e).getImageData(0,0,e.width,e.height).data,o=new Float32Array(r.length/4);for(let a=0;a<r.length;a++)o[a]=r[a*4+3]/255;return o}function De(e,n,t=5e3,r=100,o=.01,a=!0){let{canvas:l,ctx:i}=O(e,n);if(a){let s=i.createRadialGradient(0,0,0,0,0,1);s.addColorStop(0,`rgba(255, 255, 255, ${o})`),s.addColorStop(1,"rgba(255, 255, 255, 0)"),i.fillStyle=s}else i.fillStyle=`rgba(255, 255, 255, ${o})`;for(let s=0;s<t;s++){let g=[...Array(3)].map(()=>T()),[p,c]=[g[0]*e,g[1]*n],b=Math.pow(g[2],2)*r;i.save(),i.translate(p,c),i.rotate(T()*Math.PI),i.scale(b*(.5+T()),b*(.5+T())),i.beginPath(),i.arc(0,0,1,0,Math.PI*2),i.fill(),i.restore()}return l}function Me(e,n){let{canvas:t,ctx:r}=O(e.width,e.height);return r.filter=n,r.drawImage(e,0,0),t}function ye(e,n=.5,t=1e3){if(!e)debugger;let r=e.length,o=[...Array(t)].map(()=>e[Math.floor(T()*r)]);return o=o.sort(),o[Math.floor(n*o.length)]}function Ne(e,n=1e3){let t=e.length,r=[...Array(n)].map(()=>e[Math.floor(T()*t)]),o=0;for(let a of r)a>o&&(o=a);return e.map(a=>a/o)}var X=({width:e,height:n},t,r,o,a)=>W(Me(De(e,n,r,Math.sqrt(e*e+n*n)*o,a),`blur(${t}px)`));function Ge(e){let{width:n,height:t,seed:r,noiseSmoothness:o,tectonicSmoothness:a,noiseFactor:l,crustFactor:i,tectonicFactor:s,pangaea:g}=e;C=r;let p=n*t;console.time("noise");let c=X(e,o,3e3,.15,.03),b=X(e,a,2e3,.15,.03),h=X(e,a,2e3,.15,.03);console.timeEnd("noise"),console.time("main");let v=ye(b,.5),x=b.map((M,f)=>(.2/(Math.abs(v-M)+.1)-.95)*(h[f]-.2)*2),m=b.map((M,f)=>5+c[f]*l+b[f]*i+x[f]*s+-g*(Math.abs(f/p-.5)+Math.abs(f%n/n-.5)));console.timeEnd("main"),console.time("normalize");for(let M=4;M--;)for(let f=n;f<m.length;f++)for(let E of[-2,2,-n*2,n*2])m[f]+=((m[f+E]||0)-m[f])*.15;let d=Ne(m);return console.timeEnd("normalize"),{dryElevation:d,tectonic:x,p:e}}function re(e,n){return n??=Ge(e),Be(e,n)}function Be(e,n){let{width:t,height:r,averageTemperature:o,erosion:a,riversShown:l,randomiseHumidity:i,noiseSmoothness:s,seaRatio:g,flatness:p,noiseSeed:c,elevationCold:b}=e;C=c;let h=X(e,s,3e3,.15,.01),{dryElevation:v,tectonic:x}=n,m=t*r,d=ye(v,g),M=v.map((y,L)=>y<d?-Math.pow(1-y/d,.35):Math.pow((y-d)*(.5+x[L]*.5)/(1-d),1+2*p)),f=M.map((y,L)=>Math.cos((Math.abs(.5-L/m)*4+.85)*Math.PI)/(y<0?1:1+5*y*y));console.time("windSmoothing"),f=W(Me(Y(f,t,y=>[0,0,0,127*(y+1)]),"blur(3px)")).map(y=>y*2-1),console.timeEnd("windSmoothing");let E=Ue({width:t,height:r,elevation:M,tectonic:x,erosion:a,riversShown:l}),w=je({width:t,elevation:M,wind:f,steps:400});i&&(w=w.map((y,L)=>Math.max(0,y+Math.sin(h[L]*50)/10-M[L]*.2)));let P=M.map((y,L)=>o+25-100*Math.abs(.5-L/m)/(.7+.6*w[L])-Math.max(0,y)*b),A={tectonic:x,dryElevation:v,elevation:M,noise:h,rivers:E,wind:f,temperature:P,humidity:w,p:e,poi:[]};return A.biome=Xe(A),A.photo=ze(A),Ye(A),A}function Xe(e){console.time("biome");let n=e.temperature.map((t,r)=>{if(e.elevation[r]<-0)return ne;if(e.rivers[r])return B;let a=1+e.p.biomeScrambling*Math.sin(e.noise[r]*100),l=ue[~~H(0,5,e.humidity[r]*4.5*a)][~~H(0,3,t*a/10+1)];return e.elevation[r]>.4&&(l=te),l});return console.timeEnd("biome"),n}function ze(e){let{humidity:n,elevation:t,temperature:r,tectonic:o,noise:a,rivers:l,biome:i}=e,{width:s,shading:g}=e.p,p=[...n],c=[...n],b;console.time("photo");let h;function v(x,m){if(x)for(let d of[0,1,2])h[d]=ke(h[d],x[d],m)}return b=[...n].map((x,m)=>{let d=t[m];if(d<0)return[-(d**2)*1e3+100,-(d**2)*500+150,-(d**2)*300+150,255];{h=[r[m]*15-x*700,150-x*150,r[m]*8-x*500,255],he(h);let M=(d+o[m])*2-1;M>0&&v([64,0,0,255],Math.min(1.5,M**2));let f=(1+Math.sin((a[m]*3+o[m])*100))*(1+T());f=(Math.sin(a[m]*100)+.5)*f**2*.05,v([32,32,32],f),p[m]=0,l[m]&&(h=[0,100,150+50*l[m],255]);for(let E of[1,2,3])for(let w of[1,s,-1,-s,0])v(de[i[m+w*E]],.05);if(r[m]<0&&v([500,500,500],-r[m]*.03),he(h),g){let E=0;for(let P=-2;P<=2;P++)for(let A=-2;A<=2;A++)E+=t[m+P+s*A]*(Math.sign(P)+Math.sign(A));let w=t[m+1+s]+t[m+s]+t[m+1]-d-t[m-s]-t[m-1]+E*.05;l[m]==0&&l[m+s]!=0&&(w-=.1),v([500,500,260],-w),c[m]=w}return h}}),console.timeEnd("photo"),b}function ve(e,n,t=20){let r=e.length/n,o=Y(e,n,(i,s)=>[0,0,0,i<=0?100:0]),a=O(n,r),l=a.ctx;return l.beginPath(),l.lineWidth=n/8,l.rect(0,0,n,r),l.stroke(),l.filter=`blur(${t}px)`,l.filter="opacity(50%)",l.drawImage(o,0,0),{humidityImage:o,wetness:a.canvas}}function je({width:e,elevation:n,wind:t,steps:r}){console.time("humidity");let o=n.length/e,a=Math.sqrt(e*e+o*o),{humidityImage:l,wetness:i}=ve(n,e,10),s=a/10;for(let p=0;p<r;p++){let c=[p%100/100*e,p%10/10*o],b=t[U(c,e)],h=[c[0]+b*.3*e/8,c[1]+Math.abs(b)*.5*o/12];i.getContext("2d")?.drawImage(i,c[0],c[1],s,s,h[0],h[1],s,s)}z(l).filter="blur(30px)",z(l).drawImage(i,0,0,e,o,0,0,e,o);let g=W(l);return console.timeEnd("humidity"),g}function Ue({width:e,height:n,elevation:t,erosion:r,riversShown:o}){console.time("rivers");let{wetness:a}=ve(t,e,100),l=W(a),i=t.map((p,c)=>1-p-l[c]*.3),s=new Float32Array(e*n),g=se(e,4)[0];for(let p=0;p<r+o;p++){let c=p*12345%t.length,b=[],h=1e3;for(;t[c]>-.1&&h-- >0;){p>r&&(s[c]+=1);let v=i[c],x=0,m=1e6;for(let d of g)i[c+d]<=m&&(x=c+d,m=i[x]);if(m<v){let d=(i[c]-m)*.01;for(let M of[0,0,-1,1,-e,e])t[c+M]-=d,i[c+M]-=d}else i[c]=m+.05;b.push(c),c=x}}for(let p in t)t[p]>-.2&&t[p]<0&&(t[p]=t[p]>-.1?.01:t[p]*2+.2),t[p]>0&&(t[p]*=1+T()*.1);return console.timeEnd("rivers"),s}function fe(e){let n=[];for(let t in e)n[t]=e[t];return n}function ge(e){let n=parseInt(e,16);return[Math.floor(n/256)*16,Math.floor(n/16)%16*16,n%16*16,256]}function Y(e,n,t,r){let o=e.length/n,{canvas:a,ctx:l}=O(n,o),i=l.createImageData(n,o);if(!i.data||!e)debugger;for(let s=0;s<e.length;s++){let g=0,p=t?t(e[s],s)??0:[0,0,0,e[s]];i.data.set(p,s*4)}return l.putImageData(i,0,0),a}function Se(e,n,t){let{canvas:r,ctx:o}=O(n,t);return o.drawImage(e,0,0,e.width,e.height,0,0,n,t),r}function We(e,n){let t=U(n,e.p.width),r=e.biome[t],o,a=1+T();if(r==B||r==ne)o="🐠",r==B?a+=1:o="🐋";else{let i=e.noise[t+1e3]%.1;if(i<.01)o="🏔️";else if(i<.02)o=i%.01<.005?"⬛":"🛢️";else{let s=e.temperature[t]*.8+e.noise[t]*5+12,g=e.humidity[t]*10+e.noise[t]*5-5;i<.06?o=G.atc.split(",")[(g>0?5:0)+~~H(0,4,s/10)]:o=g<-.5?i%.01<.003&&s>0?"💧":"🗿":g<.2?"🌿":"🌲,🌲,🌳,🌳,🌴".split(",")[~~H(0,4,s/15)]}}return{at:n,kind:o,size:a,left:a*1e3,t:e.temperature[t]}}function Ye(e){let n=[];for(let o=1e3;o--;){let a=[~~(T()*e.p.width),~~(T()*e.p.height)],l=We(e,a);n.push(l)}let t=new Set(n.map(o=>o.kind)),r=[];for(let o of t){let a=n.filter(l=>l.kind==o);for(let l of[...a])for(let i of[...a])l!=i&&i.size&&l.size&&Oe(l.at,i.at)<40&&(l.size+=i.size,i.size=0);r.push(...a.filter(l=>l.size))}e.poi=r}function Qe(e,n,t,r){let o={};for(let a of r??Object.keys(e)){o[a]=new Float32Array(e[a].length);let l=e[a],i=n[a];for(let s in l)o[a][s]=l[s]*(1-t)+i[s]*t}return o}function Ae(e,n,t){console.time("blend");let r=Qe(e,n,t,["dryElevation","tectonic"]);console.timeEnd("blend"),console.time("blendGen");let o=re({...e.p,averageTemperature:e.p.averageTemperature+Math.sin(t*6.3)*20},r);return console.timeEnd("blendGen"),o}function _e(e){let n=e.split(/([\d.-]+)/).filter(r=>r),t={};for(let r=0;r<n.length;r+=2)t[n[r+1]]=n[r];return console.log(t),t}function qe(e){return Object.fromEntries(e.split(`
-`).map(n=>{let[t,...r]=n.split(/[:>]/);if(!r)debugger;let[o,a]=r.map(_e).filter(l=>l);return[t,{from:o,to:a,t:n,name:t}]}))}var xe,j,k,Te=10;function be(){let e;k={},xe=Object.fromEntries(G.d.split(`
-`).map(n=>{if(n[0]=="=")e=n.slice(1);else{let[t,r]=n.split(" ");return(e=="RESOURCES"||e=="TOOLS")&&(k[t]=0),[t,{name:r,category:e}]}}).filter(n=>n)),j=qe(G.rr),console.log(xe),console.log(j)}var ie,F,I=[],R=[0,0],Re,oe,Je=["unknown","desert","grassland","tundra","savanna","shrubland","taiga","tropical forest","temperate forest","rain forest","swamp","snow","steppe","coniferous forest","mountain shrubland","beach","lake","ocean"],Ee=[["seed","number"],["noiseSeed","number"],["width","number"],["height","number"],["noiseSmoothness","range",{max:10,step:.5}],["tectonicSmoothness","range",{max:10,step:.5}],["noiseFactor","range",{min:-5,max:20,step:.5}],["crustFactor","range",{min:-5,max:20,step:.5}],["tectonicFactor","range",{min:-1,max:10,step:.1}],["pangaea","range",{min:-5,max:5}],["seaRatio","range",{tip:"Sea percentage"}],["flatness","range"],["randomiseHumidity","checkbox"],["averageTemperature","range",{min:-30,max:50,step:1}],["elevationCold","range",{min:0,max:300,step:1}],["erosion","range",{max:1e5}],["riversShown","range",{max:1e3}],["biomeScrambling","range"],["squareGrid","checkbox"],["gameMapScale","range",{min:0,max:4,step:1}],["gameMapRivers","range",{max:5e4,step:1e3}],["discreteHeights","range",{max:40,step:1}]],Le={mapMode:0,seed:1,width:640,height:640,scale:1,noiseFactor:10,crustFactor:6,tectonicFactor:3,noiseSmoothness:2,tectonicSmoothness:5,pangaea:0,seaRatio:.55,flatness:.5,randomiseHumidity:0,averageTemperature:15,erosion:5e4,riversShown:400,biomeScrambling:0,terrainTypeColoring:0,discreteHeights:0,hillRatio:.12,mountainRatio:.04,gameMapRivers:15e3,gameMapScale:2,generatePhoto:1,squareGrid:0},u={};function Ve(){if(document.location.hash){u={};let e=document.location.hash.substr(1).split("&").map(n=>n.split("="));console.log(e);for(let n of e)u[n[0]]=n[1]=="false"?!1:n[1]=="true"?!0:Number(n[1]);console.log(u)}(!u||!u.width)&&(u=JSON.parse(localStorage.mapGenSettings)),(!u||!u.width)&&(u={...Le}),Fe(),le()}window.onload=Ve;window.resetSettings=()=>{};function le(){for(let[e,n]of Ee){if(n=="tip")continue;let t=document.getElementById(e);u[e]=t.type=="checkbox"?t.checked?1:0:Number(t.value);let r=document.getElementById(e+"_value");r&&(r.innerText=String(u[e]).substr(0,8))}Ke(),tt(u)}window.applySettings=le;document.body.addEventListener("mousedown",e=>{switch(e.target?.id){case"resetSettings":u={...Le},Fe(),le();return}});blendMaps.onchange=e=>{let n=Number(blendMaps.value);I.length>=2&&(F=Ae(I[I.length-2],I[I.length-1],n),Ie())};var ae={};function Fe(){let e=document.getElementById("form");e.innerHTML="";for(let n of Ee){let[t,r,o]=n;switch(o=o||{},ae[t]=o.tip,r){case"tip":e.innerHTML+=`<div class="tip">${t}</div>`;break;case"checkbox":e.innerHTML+=`<div>${t}</div><input class="checkbox" type="checkbox" id="${t}" ${u[t]?"checked":""} />`;break;case"number":e.innerHTML+=`<div>${t}</div><input class="number" type="number" id="${t}" value="${u[t]}" />`;break;case"range":let a=o.min||0,l=o.max||1,i=o.step||(l-a)/100;e.innerHTML+=`<div>${t}</div><input class="range" type="range" id="${t}" min="${a}" max="${l}" step="${i}" value="${u[t]}"/>
+`,"🍃":`🌿:2.5🍎0.5🪵1🌾1🐴1👖
+🌲:1🍎2🪵0.3🌾0.35🐴0.3👖
+🌳:2🍎1🪵0.5🌾0.5🐴0.3👖
+🌴:1.5🍎1.5🪵0.3🌾0.3🐴0.3👖`}},$e=1,ie=2,ae=3,le=4,se=5,me=6,j=7,pe=8,Fe=9,mt=10,ue=11,Ce=12,K=13,oe=14,pt=15,B=16,J=17,ke=[[ae,Ce,le,$e],[ae,se,ie,le],[ue,se,ie,pe],[ue,K,pe,j],[me,K,j,j],[me,K,j,Fe]],Pe=Re({[$e]:"fa0",[ie]:"4f4",[le]:"ff8",[ae]:"cca",[se]:"ad4",[me]:"064",[j]:"0a0",[pe]:"060",[Fe]:"084",[mt]:"880",[ue]:"fff",[Ce]:"caa",[K]:"0a6",[oe]:"884",[pt]:"ff0"}).map(Le);var He,V,Ne={};function Z(e){return~~(e.size*1e3*Math.sin(e.age*3.14)-e.taken)}function ut(e,r){let t=N(r),n=e.biome[t],o,i=1+w();if(n==B||n==J)o="🐠",n==B?i+=1:o="🐋";else{let l=e.noise[t+1e3]%.1;if(l<.01)o="🏔️";else if(l<.02)o=l%.01<.005?"⬛":"🛢️";else{let m=e.temperature[t]*.8+e.noise[t]*5+12,f=e.humidity[t]*10+e.noise[t]*5-5;l<.06?o=A.atc.split(",")[(f>0?5:0)+~~H(0,4,m/10)]:o=f<-.5?l%.01<.003&&m>0?"💧":"🗿":f<.2?"🌿":"🌲,🌲,🌳,🌳,🌴".split(",")[~~H(0,4,m/15)]}}return{at:r,kind:o,size:i,taken:0,age:w(),temp:e.temperature[t]}}function ct(e){let r=e.split(/([\d.-]+)/).filter(n=>n),t={};for(let n=0;n<r.length;n+=2)t[r[n+1]]=r[n];return t}var de={};function Ie(e,r=!1){let t;return Object.fromEntries(e.split(`
+`).map(n=>{if(n[0]=="=")return t=n.slice(1),null;let o=Number(n[0]),i={},[a,...l]=n.slice(o>=0?1:0).split(/[:>]/);if(t&&(de[a]=t,t=void 0),!l)debugger;let[m,f]=l.map(ct).map(p=>{for(let c in p)!F.BNS[c]&&!F.WLD[c]&&(i[c]=1),p[c]==0&&delete p[c];return p}).filter(p=>p);return r?[a,m]:[a,{from:m,to:f,t:n,name:a,cost:o,bonus:i}]}).filter(n=>n))}function De(){let e;He=Object.fromEntries(A.d.split(`
+`).map(r=>{if(r[0]=="=")e=r.slice(1),F[e]={};else{let[t,n]=r.split(" ");return F[e][t]=1,[t,n]}}).filter(r=>r));for(let r in A.m)Ne[r]=Ie(A.m[r],!0);V=Ie(A.rr)}function Ge(e){return{pop:100,store:Object.fromEntries(Object.keys(He).filter(t=>F.RES[t]||F.TLS[t]).map(t=>[t,0])),bonus:Object.fromEntries(Object.keys(F.BNS).map(t=>[t,0])),sel:new Set(["Walk","Swim"]),"🏃":"Walk","⚓":"Swim",date:0,seed:e,maps:[]}}function Be(){let e=s.store.food>0?0:-10;for(let r in s.store){let n=(s.store[r]/100)**.8;e+=n}return e}function je(e){delete s.store[s.deposit],s.home=e,s.deposit=e.kind,s.store[e.kind]=Z(e)}function Xe(e){console.time("populate");let r=[];e:for(let o=1e3;o--;){let i=[~~(w()*e.p.width),~~(w()*e.p.height)];for(let l of r)if(Q(l.at,i)<10)continue e;let a=ut(e,i);r.push(a)}let t=new Set(r.map(o=>o.kind)),n=[];for(let o of t){let i=r.filter(a=>a.kind==o);for(let a of[...i])for(let l of[...i])a!=l&&l.size&&a.size&&Q(a.at,l.at)<40&&(a.size+=l.size,l.size=0);n.push(...i.filter(a=>a.size))}return console.timeEnd("populate"),n}function X(e,r){let t=1e12;if(r!=null){let n=Object.values(e.to)[0];t=r/n}for(let n in e.from)t=Math.min(s.store[n]/e.from[n],t);return t}function dt({used:e,made:r}){for(let t in e)s.store[t]-=e[t],s.deposit==t&&s.home&&(s.home.taken+=e[t]);for(let t in r)s.store[t]=(s.store[t]||0)+r[t]}function ft(e){for(let r in{...e})e[r]||delete e[r];return e}function ce(e,r){let t={},n={};for(let o in e.from){let i=e.from[o]*r,a=F.TLS[o]?.1:1;t[o]=i*a}for(let o in e.to){let i=e.to[o]*r,a=A.aka[o]??o;n[a]=i}return{used:t,made:n}}function We(){let e=JSON.parse(JSON.stringify(V));for(let r of Object.values(e)){let t=Object.keys(A.m).find(n=>r.from[n]);if(t&&s.home){let n=Ne[t][s.home.kind];if(n){for(let o in r.to)n[o]&&(r.to[o]=r.to[o]*n[o]);r.from[s.home.kind]=r.from[t],delete r.from[t]}}}s.cr=e}var bt=["⚓","🏃"];function Ye(e){if(e){let r=s.cr[e];for(let n of bt)if(r.to[n]){let o=s[n];s.sel.delete(o),s.sel.add(r.name),s[n]=r.name;return}let t=X(r);if(t>0){t=Math.min(t,s.pop);let n=ce(r,t);dt(n),gt(t/s.pop)}}}function gt(e){s.date+=e/A.wpy,C()}function ze(e){let r=s.cr[e];return X(r)>0}function fe(e,r,t){if(!t)return[0,0];let n=Q(r.at,t.at),o=0,i=0;for(let a=0;a<n;a++){let l=Se(r.at,t.at,a/n),m=N(l);e.elevation[m]<0?o+=A.dm:i+=A.dm}return{"🏃":i,"⚓":o}}function Oe(e,r){return Object.fromEntries(Object.keys({...e,...r}).map(t=>[t,(e[t]||0)+(r[t]||0)]))}function be(){let e=s.pop;for(let r in s.store)s.deposit!=r&&(e+=s.store[r]*.1);return e}function Ue(e,r,t){let n=be(),o=fe(e,r,t),i=o["🏃"],a=o["⚓"],[l,m]=[V[s["🏃"]],V[s["⚓"]]];for(let y of[l,m])if(X(y)<n)return{fail:1};i*=n,a*=n;let[f,p]=[X(l,i),X(m,a)],c=ce(l,f),h=ce(m,p),x=Oe(c.made,h.made);if(x["🏃"]>=i-.1&&x["⚓"]>=a-.1){let y=Oe(c.used,h.used);return y.w=(f+p)/s.pop,ft(y)}else return{fail:2}}var I,W=[],R=[0,0],Qe,ge,T=1,Y,s,ht=["unknown","desert","grassland","tundra","savanna","shrubland","taiga","tropical forest","temperate forest","rain forest","swamp","snow","steppe","coniferous forest","mountain shrubland","beach","lake","ocean"],_e=[["seed","number"],["noiseSeed","number"],["width","number"],["height","number"],["noiseSmoothness","range",{max:10,step:.5}],["tectonicSmoothness","range",{max:10,step:.5}],["noiseFactor","range",{min:-5,max:20,step:.5}],["crustFactor","range",{min:-5,max:20,step:.5}],["tectonicFactor","range",{min:-1,max:10,step:.1}],["pangaea","range",{min:-5,max:5}],["seaRatio","range",{tip:"Sea percentage"}],["flatness","range"],["randomiseHumidity","checkbox"],["averageTemperature","range",{min:-30,max:50,step:1}],["elevationCold","range",{min:0,max:300,step:1}],["erosion","range",{max:1e5}],["riversShown","range",{max:1e3}],["biomeScrambling","range"],["squareGrid","checkbox"],["gameMapScale","range",{min:0,max:4,step:1}],["gameMapRivers","range",{max:5e4,step:1e3}],["discreteHeights","range",{max:40,step:1}]],qe={mapMode:0,seed:1,width:640,height:640,scale:1,noiseFactor:10,crustFactor:6,tectonicFactor:3,noiseSmoothness:2,tectonicSmoothness:5,pangaea:0,seaRatio:.55,flatness:.5,randomiseHumidity:0,averageTemperature:15,erosion:5e4,riversShown:400,biomeScrambling:0,terrainTypeColoring:0,discreteHeights:0,hillRatio:.12,mountainRatio:.04,gameMapRivers:15e3,gameMapScale:2,generatePhoto:1,squareGrid:0,noiseSeed:0,elevationCold:0,shading:!0},d={};function xt(){if(De(),document.location.hash){d={};let e=document.location.hash.substr(1).split("&").map(r=>r.split("="));console.log(e);for(let r of e)d[r[0]]=r[1]=="false"?!1:r[1]=="true"?!0:Number(r[1]);console.log(d)}(!d||!d.width)&&(d=JSON.parse(localStorage.mapGenSettings)),(!d||!d.width)&&(d={...qe}),Je(),ye(),s=Ge(d.seed),I=xe(0,d),s.poi=Xe(I),Ke(),C()}document.addEventListener("mousedown",e=>{Ye(e.target.dataset.rec),C()});function ye(){for(let[e,r]of _e){if(r=="tip")continue;let t=document.getElementById(e);d[e]=t.type=="checkbox"?t.checked?1:0:Number(t.value);let n=document.getElementById(e+"_value");n&&(n.innerText=String(d[e]).substr(0,8))}yt()}window.onload=xt;window.applySettings=ye;document.body.addEventListener("mousedown",e=>{switch(e.target?.id){case"resetSettings":d={...qe},Je(),ye();return}});blendMaps.onchange=e=>{let r=Number(blendMaps.value);W.length>=2&&(I=ne(W[W.length-2],W[W.length-1],r),Ke())};var he={};function Je(){let e=document.getElementById("form");e.innerHTML="";for(let r of _e){let[t,n,o]=r;switch(o=o||{},he[t]=o.tip,n){case"tip":e.innerHTML+=`<div class="tip">${t}</div>`;break;case"checkbox":e.innerHTML+=`<div>${t}</div><input class="checkbox" type="checkbox" id="${t}" ${d[t]?"checked":""} />`;break;case"number":e.innerHTML+=`<div>${t}</div><input class="number" type="number" id="${t}" value="${d[t]}" />`;break;case"range":let i=o.min||0,a=o.max||1,l=o.step||(a-i)/100;e.innerHTML+=`<div>${t}</div><input class="range" type="range" id="${t}" min="${i}" max="${a}" step="${l}" value="${d[t]}"/>
         <div id="${t}_value"></div>
-        `;break}}}function Ke(){document.location.hash=Object.keys(u).map(e=>`${e}=${u[e]}`).join("&"),localStorage.mapGenSettings=JSON.stringify(u)}function Ze(e,n,t,r=1/4,o){let a=Y(e,u.width,t,o),i=Se(a,a.width*r,a.height*r).getContext("2d");return i.font="14px Verdana",i.fillStyle="#fff",i.strokeText(n,5,15),i.fillText(n,4,14),main.appendChild(a),main.style.width=`${u.width*devicePixelRatio}px`,main.style.height=`${u.height*devicePixelRatio}px`,ie=a,a}function et(e){let n=U(e,u.width);tooltip.style.left=`${Math.min(window.innerWidth-300,oe[0]+20)}`,tooltip.style.top=`${Math.min(window.innerHeight-300,oe[1]-40)}`,tooltip.style.display="grid",tooltip.innerHTML=Object.keys(F).map(t=>{let r=F[t][n];return`<div>${t}</div><div>${t=="photo"?r?.map(o=>~~o):t=="biome"?r+" "+Je[r]?.toUpperCase():~~(r*1e6)/1e6}</div>`}).join(""),D&&(tooltip.innerHTML+=`${D.kind} ${~~D.left}`)}document.onmousemove=e=>{let n=[e.movementX,e.movementY];oe=[e.screenX,e.screenY],e.target==ie&&e.buttons&&(R[0]+=n[0]*devicePixelRatio,R[1]+=n[1]*devicePixelRatio,Q());let t=e.target,r=t.tagName=="CANVAS",o=t.id;r||t.classList.contains("poi")?(Re=[e.offsetX/t.width*u.width/devicePixelRatio,e.offsetY/t.height*u.height/devicePixelRatio],et(Re)):ae[o]?tooltip.innerHTML=ae[o]:tooltip.style.display="none"};var S=1;main.onwheel=e=>{let n=S;S+=(e.deltaY>0?-1:1)*1/8,S=S<0?0:S,console.log(S,R),R[0]=(R[0]-400)*2**(S-n)+400,R[1]=(R[1]-400)*2**(S-n)+400,e.preventDefault(),e.stopPropagation(),Q()};var D,Pe;function Ie(){console.time("draw"),main.setHTMLUnsafe(""),Ze(F.photo,"photo",e=>e,void 0,e=>Math.max(1,~~(F.elevation[e]*20)*2));for(let e of F.poi){let n=document.createElement("div");n.classList.add("poi"),n.innerHTML=`${e.kind}<center style=color:rgb(${15*e.t-400},50,${-20*e.t+100})>${~~e.left}</center>`,e.div=n,n.onmouseover=()=>{D=e},n.onmouseleave=()=>{D=void 0},n.onclick=()=>{Pe=e,Q()},main.appendChild(n)}console.timeEnd("draw"),Q()}function we(e){return e?Object.keys(e).map(n=>`${e[n]==1?"":e[n]}${n}`).join("+"):""}function Q(){ie.style.transform=`translate(${R[0]}px, ${R[1]}px) scale(${2**S})`;for(let n of F.poi){let t=n.div;if(t){let r=(n.size**.5*3+4)*2**S;t.style.left=`${n.at[0]*devicePixelRatio*2**S+R[0]-r/2}px`,t.style.top=`${n.at[1]*devicePixelRatio*2**S+R[1]-r/2}px`,t.style.fontSize=`${r}px`,t.dataset.cur=n==Pe?"1":""}}let e=JSON.parse(JSON.stringify(j));for(let n of Object.values(e))if(["🐾","🍃"].find(r=>n.from[r]))debugger;recdiv.innerHTML="👨‍👩‍👦‍👦"+Te+"|"+Object.keys(k).map(n=>`${n}${k[n]}`).join("|")+"<br/>"+Object.values(e).map(n=>`<button>${`${n.name} ${we(n.from)}➨${we(n.to)}`}</button>`).join("")}function tt(e){console.time("generation total"),F=re(e),I.push(F),Ie(),console.timeEnd("generation total")}})();
+        `;break}}}function yt(){document.location.hash=Object.keys(d).map(e=>`${e}=${d[e]}`).join("&"),localStorage.mapGenSettings=JSON.stringify(d)}var L;function Mt(e,r,t,n=1/4,o){L=q(e,d.width,t,o);let a=Ee(L,L.width*n,L.height*n).getContext("2d");return a.font="14px Verdana",a.fillStyle="#fff",a.strokeText(r,5,15),a.fillText(r,4,14),main.appendChild(L),main.style.width=`${d.width*devicePixelRatio}px`,main.style.height=`${d.height*devicePixelRatio}px`,L=L,L}function vt(e){let r=N(e);tooltip.style.left=`${Math.min(window.innerWidth-300,ge[0]+20)}`,tooltip.style.top=`${Math.min(window.innerHeight-300,ge[1]-40)}`,tooltip.style.display="grid",tooltip.innerHTML=Object.keys(I).map(t=>{let n=I[t][r];return`<div>${t}</div><div>${t=="photo"?n?.map(o=>~~o):t=="biome"?n+" "+ht[n]?.toUpperCase():~~(n*1e6)/1e6}</div>`}).join(""),Y&&(tooltip.innerHTML+=`${Y.kind} ${~~Z(Y)}`)}document.onmousemove=e=>{let r=[e.movementX,e.movementY];ge=[e.screenX,e.screenY],e.target==L&&e.buttons&&(R[0]+=r[0]*devicePixelRatio,R[1]+=r[1]*devicePixelRatio,C());let t=e.target,n=t.tagName=="CANVAS",o=t.id;n||t.classList.contains("poi")?(Qe=[e.offsetX/t.width*d.width/devicePixelRatio,e.offsetY/t.height*d.height/devicePixelRatio],vt(Qe)):he[o]?tooltip.innerHTML=he[o]:tooltip.style.display="none"};main.onwheel=e=>{let r=T;T+=(e.deltaY>0?-1:1)*1/8,T=T<0?0:T,console.log(T,R);let t=d.width/2;R[0]=(R[0]-t)*2**(T-r)+t,R[1]=(R[1]-t)*2**(T-r)+t,e.preventDefault(),e.stopPropagation(),C()};function St(e){let r=s.poi[e],t=fe(I,r,s.home),n=Ue(I,r,s.home);return`<div class=poi id=poi${e}>
+${r.kind}<center style=color:rgb(${15*r.temp-400},50,${-20*r.temp+100})>${~~Z(r)}
+${!s.home||r==s.home?"":`<br/>${ee(t)}<br/>${ee(n)}`}</center>
+</div>`}function Ke(){console.time("draw"),L&&main.removeChild(L),Mt(I.photo,"photo",e=>e,void 0,e=>Math.max(1,~~(I.elevation[e]*20)*2)),console.timeEnd("draw"),C()}window.poiOver=e=>{console.log(e)};function Ve(e){return parseFloat(Number(e).toFixed(2))}function ee(e){return e?Object.keys(e).map(r=>`${Ve(e[r])}${r}`).join(" "):""}function C(){if(!s)return;L.style.transform=`translate(${R[0]}px, ${R[1]}px) scale(${2**T})`;let e="";for(let n in s.poi)e+=St(n);ps.innerHTML=e;let r=d.width/2;for(let n in s.poi){let o=s.poi[n],i=document.querySelector(`#poi${n}`);if(i){let a=(o.size**.5*3+4)*2**T;i.style.left=`${o.at[0]*devicePixelRatio*2**T+R[0]-a/2}px`,i.style.top=`${o.at[1]*devicePixelRatio*2**T+R[1]-a/2}px`,i.style.fontSize=`${a}px`,i.dataset.cur=o==s.home,i.onmouseover=()=>{Y=o},i.onmouseleave=()=>{Y=void 0},i.onmousedown=()=>{je(o),C(),R[0]=(-o.at[0]*2**T+r)*devicePixelRatio,R[1]=(-o.at[1]*2**T+r)*devicePixelRatio}}}We(),s.bonus["💗"]=Be();let t={"👨‍👩‍👦‍👦":s.pop,"🏋":be(),"📅":Ve(s.date*A.wpy),...s.bonus,...s.store};recdiv.innerHTML="<div id=res>"+Object.keys(t).map(n=>[n,~~t[n]]).map(n=>`<span onmousedown="give('${n[0]}')">${n.join("<br/>")}</span>`).join("")+"</div>"+Object.values(s.cr).map(n=>{let o=ee(n.to),i=de[n.name],a=n.cost==0;return(i?`<div>${i}</div>`:"")+`<button data-sel=${s.sel.has(n.name)} data-rec="${n.name}" data-use="${a&&ze(n.name)}" >
+${a?"":"<div class=un>UNKNOWN</div>"}
+${`<div class=r><div>${n.name}</div><div>${n.cost}⚗️↩${Object.keys(n.bonus)}</div></div>
+<span class=rec>${ee(n.from)}${o?"🡢 "+o:""}</span>`}
+</button>`}).join("")}window.give=e=>{s.store[e]+=100,C()};function xe(e){let r=~~e;if(r!=e&&(e=r+~~(e%1*13)/13),s.maps[e])return s.maps[e];if(r==e)return s.maps[e]=re({...d,seed:s.seed+e}),s.maps[e];let[t,n]=[xe(r,d),xe(r+1,d)],o=ne(t,n,e-r);return console.timeEnd("generation total"),o}})();

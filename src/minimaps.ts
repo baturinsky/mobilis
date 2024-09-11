@@ -424,15 +424,13 @@ function renderMap(m: LayeredMap) {
     elevation[i] < 0 || rivers[i] ? [0, 40, 80, 255] : biomeColors[v]
   );
 
-  if (settings.generatePhoto) {
-    showMap(m.photo, "photo", (v) => v, undefined, i => Math.max(1, ~~(elevation[i] * 20) * 2));
-    for (let p of m.poi) {
-      let d = document.createElement("div");
-      d.classList.add("poi");
-      d.innerHTML = p.icon;
-      p.div = d;
-      main.appendChild(d);
-    }
+  showMap(m.photo, "photo", v => v, undefined, i => Math.max(1, ~~(elevation[i] * 20) * 2));
+  for (let p of m.poi) {
+    let d = document.createElement("div");
+    d.classList.add("poi");
+    d.innerHTML = p.icon;
+    p.div = d;
+    main.appendChild(d);
   }
 
   console.timeEnd("draw");

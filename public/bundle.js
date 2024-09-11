@@ -86,12 +86,15 @@
   function dist(a, b) {
     return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5;
   }
+  function lerpXY(a, b, n) {
+    return [lerp(a[0], b[0], n), lerp(a[1], b[1], n)];
+  }
   function random() {
     let x = Math.sin(randomSeed) * 1e4;
     randomSeed = (randomSeed + Math.E) % 1e8;
     return x - Math.floor(x);
   }
-  function coord2ind([x, y], width) {
+  function coord2ind([x, y], width = settings.width) {
     return ~~x + ~~y * width;
   }
   function context2d(canvas) {
@@ -390,7 +393,7 @@
     const spotSize = mapDiagonal / 10;
     for (let i = 0; i < steps; i++) {
       let start = [i % 100 / 100 * width, i % 10 / 10 * height];
-      let windThere = wind[coord2ind(start, width)];
+      let windThere = wind[coord2ind(start)];
       let end = [
         start[0] + windThere * 0.3 * width / 8,
         start[1] + Math.abs(windThere) * 0.5 * height / 12
@@ -528,19 +531,24 @@
   }
 
   // src/scenario.ts
+  var categories = {};
   var scenario2 = {
-    d: `=DEPOSITS
+    rcst: [0, 100, 300, 1e3, 3e3],
+    wpy: 169,
+    /**Distance multiplier */
+    dm: 0.1,
+    d: `=DEP
 🏔️ ores
 ⬛ coal
 🛢️ oil
 💧 water
 🗿 relic
-=PLANTS
+=PLNT
 🌿 grass
 🌲 taiga
 🌳 forest
 🌴 jungles
-=WILDLIFE
+=ANM
 🐏 ram
 🐂 yak
 🐎 mustang
@@ -548,67 +556,100 @@
 🐺 wolves
 🐗 hogs
 🐅 tigers
-=RESOURCES
+=RES
 👖 fabric
 🪵 wood
 🍎 food
 ⛽ fuel
 📙 book
-=TOOLS
+=TLS
 🛠️ tools
 ⛺ housing
 🛷 wagons
 🐴 horses
 ⚙️ engines
-🗡️ weapons`,
+🏹 weapons
+=BNS
+🥄 food consumption
+🔭 visibility range
+🗑️ food spoilage
+🎯 hunting bonus
+🍲 food happiness
+💗 happiness
+⚗️ research focus
+=WLD
+🐾 animals
+🍃 plants
+🌾 cropss
+=MOV
+🏃 walk
+⚓ swim
+=CALAMITY
+👹 goblin
+☣️ taint
+🌋 fracture`,
     st: `Foraging;Walking;Sticks`,
-    rr: `Foraging:1🍃>1🍎
-Walking:>🏃1
-Hunting:1🐾>1🍎1👖
-Fishing:1🐠>3🍎
-Sticks:1🍃>1🪵
-Mining:1🛠️1🏔️>1🪨
-Axes:1🍃1🛠️0.1🪨>3🪵
-Writing:>1📙
-Parchment:2👖>2📙
-Wigwam:1🪵3👖>⛺
-Paper:1🪵1🛠️>4📙
-Printing:1🪵2🛠️>10📙
-Archeology:1🗿1🛠️>30📙
-Tools:1🪵>1🛠️
-Metal Working:1🪵1🪨>1🛠️
-Rifles:1⚙️1⛽1🪨>1🏹
-Alloys:1⚙️1⛽1🪨>1⛺
-Cars:1⚙️1⛽1🪨>1🛒
-Hunting bows:3🐾1🏹>3🍎3👖
-Bows:>1🏹
-Traps:2🐾1🛠️>2🍎2👖
-Animal Husbandry:10🌿>10🍎
-Farms:3🌿>5🍎
-Plantations:3🌿>3👖
-Firewood:1🪵>1⛽
-Coal:1⬛>5⛽
-Drills:1⚙️⛽1⬛>10⛽
-Oil:1⚙️1⛽1🛢️>20⛽
-Greenhouse:1⛺1⛽>5🍎
-Fishing Nets:1🛠️1🐠>5🍎
-Whaling:1⚓1🛠️1🐋>10🍎
-Dog Taming:0.05🥄0.2🦊0.2💗
-Cat Taming:0.03🥄-0.2🗑️0.2💗
-Pottery:-0.2🗑️
-Conservation:-0.3🗑️
-Cooking:-0.1🗑️0.5💗🍎
-Mapmaking:0.25🔭
-Astronomy:0.25🔭
-Compass:0.25🔭
-Optics:0.25🔭
-Horse Herding:3🌿>1🐴
-Carts:1🛷>2🏃
-Horseback Riding:1🐴1🛷>4🏃
-Cars:1⚙️1⛽1🛷>10🏃
-Steam:1⚙️1⛽1🛷>10⚓
-Sails:1👖1🛷>3⚓`,
+    aka: { "🌾": "🍎" },
+    rr: `=Land travel method
+0Walk:>1🏃
+0Ride:1🐴1🛷>4🏃0🐎0🐪
+0Drive:1⚙️1⛽1🛷>10🏃
+=Sea travel method
+0Swim:>0.1⚓
+0Sail:0.1👖1🛷>3⚓
+0Boat:1⚙️1⛽1🛷>10⚓
+=Jobs
+0Forage:1🍃>3🍎
+0Pick Sticks:1🍃>1🪵
+1Axe:1🍃1🛠️.1🪨>3🪵
+2Herd:10🍃>10🌾0🐂0🐗
+2Farm:3🍃>5🌾
+2Plantation:3🍃>3👖
+0Hunt:1🐾>3🍎1👖
+1Bow:3🐾1🏹>10🍎3👖
+1Trap:2🐾1🛠️>5🍎2👖
+0Fish:1🐠>10🍎
+1Fishing nets:1🛠️1🐠>15🍎
+3Whaling:1⚓1🛠️1🐋>30🍎
+1Tools:1🪵>1🛠️
+1Sharp Sticks:1🪵>.3🏹
+1Wheel:3🪵>1🛷
+1Wigwam:1🪵3👖>1⛺
+1Dig:1🛠️1🏔️>1🪨
+3Mine:1⚙️1⛽1🏔️>10⛽
+3Firewood:1🪵>1⛽
+3Coal:1⚙️1⛽1⬛>10⛽
+4Oil:1⚙️1⛽1🛢️>20⛽
+1Write:>.1📙0👖0🪵
+2Parchment:2👖>.2📙
+3Paper:1🪵1🛠️>.4📙
+4Print:1🪵2🛠️>1📙
+4Archeology:1🗿1🛠️>3📙
+1Horses:3🍃>1🐴0🐎0🐪
+2Metal Working:1🪵1🪨>3🛠️
+4Rifles:1⚙️1⛽1🪨>3🏹
+4Engines:3🛠️3🪨>1⚙️
+3Alloys:1⚙️1⛽1🪨>3⛺
+4Cars:1⚙️1⛽1🪨>1🛷
+4Greenhouse:1⛺1⛽>15🍎
+=Calamities
+4Kill goblins:1🏹1👹>1📙
+4Burn taint:1🛠️1⛽1☣️>1📙
+4Close fracture:1⚙️1⛽1🌋>1📙
+=Permanent bonuses
+1Tame Dogs:.05🥄.2🎯1💗0🐺
+1Tame Cats:.03🥄-.2🗑️1💗0🐅
+1Pottery:-.2🗑️0🍎
+2Conservation:-.3🗑️0🍎
+2Cooking:-.1🗑️.5🍲0🍎
+1Mapmaking:.25🔭0🏃
+2Astronomy:.25🔭0🏃
+3Compass:.25🔭0🏃
+4Optics:.25🔭0🏃
+1Research Focus:1⚗️0📙`,
+    /**animals per temperature and humidity */
     atc: "🐏,🐂,🐂,🐎,🐪,🐏,🐺,🐗,🐗,🐅",
+    /**multipliers*/
     m: {
       "🐾": `🐏:1🍎3👖
 🐂:3🍎1👖
@@ -618,10 +659,10 @@ Sails:1👖1🛷>3⚓`,
 🐗:4🍎1👖
 🐅:1🍎2👖
 `,
-      "🍃": `🌿:2.5🍎0.5🪵1🌾
-🌲:1🍎2🪵0.3🌾
-🌳:2🍎1🪵0.5🌾
-🌴:1.5🍎1.5🪵0.3🌾`
+      "🍃": `🌿:2.5🍎0.5🪵1🌾1🐴1👖
+🌲:1🍎2🪵0.3🌾0.35🐴0.3👖
+🌳:2🍎1🪵0.5🌾0.5🐴0.3👖
+🌴:1.5🍎1.5🪵0.3🌾0.3🐴0.3👖`
     }
   };
   var DESERT = 1;
@@ -675,7 +716,7 @@ Sails:1👖1🛷>3⚓`,
     return ~~(p.size * 1e3 * Math.sin(p.age * 3.14) - p.taken);
   }
   function generatePoi(m2, at) {
-    let i = coord2ind(at, m2.p.width);
+    let i = coord2ind(at);
     let biome = m2.biome[i];
     let kind;
     let size = 1 + random();
@@ -709,49 +750,83 @@ Sails:1👖1🛷>3⚓`,
     let c = {};
     for (let i = 0; i < a.length; i += 2)
       c[a[i + 1]] = a[i];
-    console.log(c);
     return c;
   }
+  var recipeGroupStartingWith = {};
   function parseRecipes(s, short = false) {
+    let groupName;
     return Object.fromEntries(s.split("\n").map((v) => {
-      let [name, ...etc] = v.split(/[:>]/);
+      if (v[0] == "=") {
+        groupName = v.slice(1);
+        return null;
+      }
+      let cost = Number(v[0]);
+      let bonus = {};
+      let [name, ...etc] = v.slice(cost >= 0 ? 1 : 0).split(/[:>]/);
+      if (groupName) {
+        recipeGroupStartingWith[name] = groupName;
+        groupName = void 0;
+      }
       if (!etc)
         debugger;
-      let [from, to] = etc.map(strToObj).filter((v2) => v2);
-      return short ? [name, from] : [name, { from, to, t: v, name }];
-    }));
+      let [from, to] = etc.map(strToObj).map((a) => {
+        for (let k in a) {
+          if (!categories.BNS[k] && !categories.WLD[k])
+            bonus[k] = 1;
+          if (a[k] == 0) {
+            delete a[k];
+          }
+        }
+        return a;
+      }).filter((v2) => v2);
+      return short ? [name, from] : [name, { from, to, t: v, name, cost, bonus }];
+    }).filter((v) => v));
   }
   function parsePedia() {
     let category;
     dict = Object.fromEntries(scenario2.d.split("\n").map((v) => {
-      if (v[0] == "=")
+      if (v[0] == "=") {
         category = v.slice(1);
-      else {
+        categories[category] = {};
+      } else {
         let [k, name] = v.split(" ");
-        return [k, { name, category }];
+        categories[category][k] = 1;
+        return [k, name];
       }
     }).filter((a) => a));
     for (let m2 in scenario2.m) {
       mult[m2] = parseRecipes(scenario2.m[m2], true);
     }
     recipes = parseRecipes(scenario2.rr);
-    console.log(dict);
-    console.log(recipes);
-    console.log(mult);
   }
-  function initGame() {
+  function initGame(seed) {
     let game2 = {
       pop: 100,
-      store: Object.fromEntries(Object.keys(dict).filter((k) => ["RESOURCES", "TOOLS"].includes(dict[k].category)).map((k) => [k, 0]))
+      store: Object.fromEntries(Object.keys(dict).filter((k) => categories.RES[k] || categories.TLS[k]).map((k) => [k, 0])),
+      bonus: Object.fromEntries(Object.keys(categories.BNS).map((k) => [k, 0])),
+      sel: /* @__PURE__ */ new Set(["Walk", "Swim"]),
+      "🏃": "Walk",
+      "⚓": "Swim",
+      date: 0,
+      seed,
+      maps: []
     };
     return game2;
+  }
+  function happiness() {
+    let h = game.store.food > 0 ? 0 : -10;
+    for (let k in game.store) {
+      let v = game.store[k];
+      let b = (v / 100) ** 0.8;
+      h += b;
+    }
+    return h;
   }
   function travelToP(p) {
     delete game.store[game.deposit];
     game.home = p;
     game.deposit = p.kind;
     game.store[p.kind] = poiLeft(p);
-    rescale();
   }
   function populate(m2) {
     console.time("populate");
@@ -783,6 +858,48 @@ Sails:1👖1🛷>3⚓`,
     console.timeEnd("populate");
     return fp;
   }
+  function recipeMax(r, goal) {
+    let max = 1e12;
+    if (goal != null) {
+      let to = Object.values(r.to)[0];
+      max = goal / to;
+    }
+    for (let k in r.from) {
+      max = Math.min(game.store[k] / r.from[k], max);
+    }
+    return max;
+  }
+  function recipeUse({ used, made }) {
+    for (let k in used) {
+      game.store[k] -= used[k];
+      if (game.deposit == k && game.home) {
+        game.home.taken += used[k];
+      }
+    }
+    for (let k in made) {
+      game.store[k] = (game.store[k] || 0) + made[k];
+    }
+  }
+  function trimObj(a) {
+    for (let k in { ...a })
+      if (!a[k])
+        delete a[k];
+    return a;
+  }
+  function recipeUsage(r, m2) {
+    let used = {}, made = {};
+    for (let k in r.from) {
+      let v = r.from[k] * m2;
+      let useMult = categories.TLS[k] ? 0.1 : 1;
+      used[k] = v * useMult;
+    }
+    for (let k in r.to) {
+      let v = r.to[k] * m2;
+      let sk = scenario2.aka[k] ?? k;
+      made[sk] = v;
+    }
+    return { used, made };
+  }
   function setLocalRecipes() {
     let rr = JSON.parse(JSON.stringify(recipes));
     for (let r of Object.values(rr)) {
@@ -801,6 +918,84 @@ Sails:1👖1🛷>3⚓`,
       }
     }
     game.cr = rr;
+  }
+  var travelTypes = ["⚓", "🏃"];
+  function tryToUse(rname) {
+    if (rname) {
+      let r = game.cr[rname];
+      for (let travelType of travelTypes) {
+        if (r.to[travelType]) {
+          let tt = game[travelType];
+          game.sel.delete(tt);
+          game.sel.add(r.name);
+          game[travelType] = r.name;
+          return;
+        }
+      }
+      let v = recipeMax(r);
+      if (v > 0) {
+        v = Math.min(v, game.pop);
+        let usage = recipeUsage(r, v);
+        recipeUse(usage);
+        advanceTimeByWeeks(v / game.pop);
+      }
+    }
+  }
+  function advanceTimeByWeeks(weeks) {
+    game.date += weeks / scenario2.wpy;
+    render();
+  }
+  function recipeUseable(rname) {
+    let r = game.cr[rname];
+    return recipeMax(r) > 0;
+  }
+  function travelSteps(m2, a, b) {
+    if (!b)
+      return [0, 0];
+    let d = dist(a.at, b.at);
+    let w = 0, l = 0;
+    for (let i = 0; i < d; i++) {
+      let at = lerpXY(a.at, b.at, i / d);
+      let ind = coord2ind(at);
+      if (m2.elevation[ind] < 0)
+        w += scenario2.dm;
+      else
+        l += scenario2.dm;
+    }
+    return { "🏃": l, "⚓": w };
+  }
+  function sumObj(a, b) {
+    return Object.fromEntries(Object.keys({ ...a, ...b }).map((k) => [k, (a[k] || 0) + (b[k] || 0)]));
+  }
+  function travelWeight() {
+    let v = game.pop;
+    for (let k in game.store) {
+      if (game.deposit != k)
+        v += game.store[k] * 0.1;
+    }
+    return v;
+  }
+  function travelCost(m2, a, b) {
+    let tw = travelWeight();
+    let ts = travelSteps(m2, a, b);
+    let landSteps = ts["🏃"], waterSteps = ts["⚓"];
+    let [landRecipe, waterRecipe] = [recipes[game["🏃"]], recipes[game["⚓"]]];
+    for (let r of [landRecipe, waterRecipe]) {
+      if (recipeMax(r) < tw)
+        return { fail: 1 };
+    }
+    landSteps *= tw;
+    waterSteps *= tw;
+    let [landTime, waterTime] = [recipeMax(landRecipe, landSteps), recipeMax(waterRecipe, waterSteps)];
+    let landResources = recipeUsage(landRecipe, landTime), waterResources = recipeUsage(waterRecipe, waterTime);
+    let sum = sumObj(landResources.made, waterResources.made);
+    if (sum["🏃"] >= landSteps - 0.1 && sum["⚓"] >= waterSteps - 0.1) {
+      let so = sumObj(landResources.used, waterResources.used);
+      so.w = (landTime + waterTime) / game.pop;
+      return trimObj(so);
+    } else {
+      return { fail: 2 };
+    }
   }
 
   // src/prog.ts
@@ -944,7 +1139,10 @@ Sails:1👖1🛷>3⚓`,
     gameMapRivers: 15e3,
     gameMapScale: 2,
     generatePhoto: 1,
-    squareGrid: 0
+    squareGrid: 0,
+    noiseSeed: 0,
+    elevationCold: 0,
+    shading: true
   };
   var settings = {};
   function init() {
@@ -964,18 +1162,16 @@ Sails:1👖1🛷>3⚓`,
       settings = { ...defaultSettings };
     rebuildForm();
     applySettings();
-    game = initGame();
+    game = initGame(settings.seed);
+    m = generateGameMap(0, settings);
     game.poi = populate(m);
     renderMap();
-    rescale();
-    document.onclick = (e) => {
-      let rname = e.target.dataset.rec;
-      if (rname) {
-        let r = gam;
-        console.log(rec);
-      }
-    };
+    render();
   }
+  document.addEventListener("mousedown", (e) => {
+    tryToUse(e.target.dataset.rec);
+    render();
+  });
   function applySettings() {
     for (let [id, type] of parameters) {
       if (type == "tip") continue;
@@ -985,7 +1181,6 @@ Sails:1👖1🛷>3⚓`,
       if (id_value) id_value.innerText = String(settings[id]).substr(0, 8);
     }
     saveSettings();
-    generate(settings);
   }
   window.onload = init;
   window["applySettings"] = applySettings;
@@ -1054,7 +1249,7 @@ Sails:1👖1🛷>3⚓`,
     return mainCanvas;
   }
   function updateTooltip(mouseAt2) {
-    let ind = coord2ind(mouseAt2, settings.width);
+    let ind = coord2ind(mouseAt2);
     tooltip.style.left = `${Math.min(window.innerWidth - 300, screenXY[0] + 20)}`;
     tooltip.style.top = `${Math.min(window.innerHeight - 300, screenXY[1] - 40)}`;
     tooltip.style.display = "grid";
@@ -1074,7 +1269,7 @@ Sails:1👖1🛷>3⚓`,
     if (e.target == mainCanvas && e.buttons) {
       mapScroll[0] += move[0] * devicePixelRatio;
       mapScroll[1] += move[1] * devicePixelRatio;
-      rescale();
+      render();
     }
     let target = e.target;
     let isCanvas = target.tagName == "CANVAS";
@@ -1096,40 +1291,48 @@ Sails:1👖1🛷>3⚓`,
     zoom += (e.deltaY > 0 ? -1 : 1) * 1 / 8;
     zoom = zoom < 0 ? 0 : zoom;
     console.log(zoom, mapScroll);
-    mapScroll[0] = (mapScroll[0] - 400) * 2 ** (zoom - old) + 400;
-    mapScroll[1] = (mapScroll[1] - 400) * 2 ** (zoom - old) + 400;
+    let half = settings.width / 2;
+    mapScroll[0] = (mapScroll[0] - half) * 2 ** (zoom - old) + half;
+    mapScroll[1] = (mapScroll[1] - half) * 2 ** (zoom - old) + half;
     e.preventDefault();
     e.stopPropagation();
-    rescale();
+    render();
   };
+  function poiText(i) {
+    let p = game.poi[i];
+    let ts = travelSteps(m, p, game.home);
+    let tc = travelCost(m, p, game.home);
+    return `<div class=poi id=poi${i}>
+${p.kind}<center style=color:rgb(${15 * p.temp - 400},50,${-20 * p.temp + 100})>${~~poiLeft(p)}
+${!game.home || p == game.home ? "" : `<br/>${recipeToText(ts)}<br/>${recipeToText(tc)}`}</center>
+</div>`;
+  }
   function renderMap() {
     console.time("draw");
     mainCanvas && main.removeChild(mainCanvas);
     showMap(m.photo, "photo", (v) => v, void 0, (i) => Math.max(1, ~~(m.elevation[i] * 20) * 2));
-    if (game) {
-      let s = "";
-      for (let i in game.poi) {
-        let p = game.poi[i];
-        s += `<div 
-class=poi 
-id=poi${i}
->${p.kind}<center style=color:rgb(${15 * p.temp - 400},50,${-20 * p.temp + 100})>${~~poiLeft(p)}</center></div>`;
-      }
-      ps.innerHTML = s;
-    }
     console.timeEnd("draw");
-    rescale();
+    render();
   }
   window["poiOver"] = (e) => {
     console.log(e);
   };
-  function recipeToText(r) {
-    return r ? Object.keys(r).map((k) => `${r[k] == 1 ? "" : r[k]}${k}`).join("+") : "";
+  function fix(n) {
+    return parseFloat(Number(n).toFixed(2));
   }
-  function rescale() {
+  function recipeToText(r) {
+    return r ? Object.keys(r).map((k) => `${fix(r[k])}${k}`).join(" ") : "";
+  }
+  function render() {
     if (!game)
       return;
     mainCanvas.style.transform = `translate(${mapScroll[0]}px, ${mapScroll[1]}px) scale(${2 ** zoom})`;
+    let s = "";
+    for (let i in game.poi) {
+      s += poiText(i);
+    }
+    ps.innerHTML = s;
+    let half = settings.width / 2;
     for (let i in game.poi) {
       let p = game.poi[i];
       let d = document.querySelector(`#poi${i}`);
@@ -1138,26 +1341,61 @@ id=poi${i}
         d.style.left = `${p.at[0] * devicePixelRatio * 2 ** zoom + mapScroll[0] - size / 2}px`;
         d.style.top = `${p.at[1] * devicePixelRatio * 2 ** zoom + mapScroll[1] - size / 2}px`;
         d.style.fontSize = `${size}px`;
-        d.dataset.cur = p == game.home ? "1" : "";
+        d.dataset.cur = p == game.home;
         d.onmouseover = () => {
           poiPointed = p;
         };
         d.onmouseleave = () => {
           poiPointed = void 0;
         };
-        d.onclick = () => {
+        d.onmousedown = () => {
           travelToP(p);
+          render();
+          mapScroll[0] = (-p.at[0] * 2 ** zoom + half) * devicePixelRatio;
+          mapScroll[1] = (-p.at[1] * 2 ** zoom + half) * devicePixelRatio;
         };
       }
     }
     setLocalRecipes();
-    recdiv.innerHTML = "👨‍👩‍👦‍👦" + game.pop + "|" + Object.keys(game.store).map((k) => `${k}${game.store[k]}`).join("|") + "<br/>" + Object.values(game.cr).map((r) => `<button data-rec="${r.name}" >${`${r.name} ${recipeToText(r.from)}➨${recipeToText(r.to)}`}</button>`).join("");
+    game.bonus["💗"] = happiness();
+    let barCont = {
+      "👨‍👩‍👦‍👦": game.pop,
+      "🏋": travelWeight(),
+      "📅": fix(game.date * scenario2.wpy),
+      ...game.bonus,
+      ...game.store
+    };
+    recdiv.innerHTML = "<div id=res>" + Object.keys(barCont).map((k) => [k, ~~barCont[k]]).map(
+      (a) => `<span onmousedown="give('${a[0]}')">${a.join("<br/>")}</span>`
+    ).join("") + "</div>" + Object.values(game.cr).map((r) => {
+      let to = recipeToText(r.to);
+      let rg = recipeGroupStartingWith[r.name];
+      let known = r.cost == 0;
+      return (rg ? `<div>${rg}</div>` : "") + `<button data-sel=${game.sel.has(r.name)} data-rec="${r.name}" data-use="${known && recipeUseable(r.name)}" >
+<div class=rb>⚗️</div> 
+${!known ? `<div class=un>UNKNOWN</div>` : ""}
+${`<div class=r><div>${r.name}</div><div>${r.cost}⚗️↩${Object.keys(r.bonus)}</div></div>
+<span class=rec>${recipeToText(r.from)}${to ? "🡢 " + to : ""}</span>`}
+</button>`;
+    }).join("");
   }
-  function generate(params) {
-    console.time("generation total");
-    m = generateMap(params);
-    mapList.push(m);
-    renderMap();
+  window["give"] = (a) => {
+    game.store[a] += 100;
+    render();
+  };
+  function generateGameMap(date) {
+    let before = ~~date;
+    if (before != date)
+      date = before + ~~(date % 1 * 13) / 13;
+    if (game.maps[date])
+      return game.maps[date];
+    if (before == date) {
+      game.maps[date] = generateMap({ ...settings, seed: game.seed + date });
+      return game.maps[date];
+    }
+    let [a, b] = [generateGameMap(before, settings), generateGameMap(before + 1, settings)];
+    let blend = blendFull(a, b, date - before);
     console.timeEnd("generation total");
+    return blend;
   }
 })();

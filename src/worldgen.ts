@@ -1,6 +1,7 @@
 "use strict";
 
 import { createNeighborDeltas, SQUARE8 } from "./geometry";
+import { settings } from "./prog";
 import { biomeColors, biomeTable, LAKE, MOUNTAIN, OCEAN, scenario } from "./scenario";
 
 
@@ -45,6 +46,10 @@ export function dist(a: XY, b: XY) {
     return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5;
 }
 
+export function lerpXY(a: XY, b: XY, n:number) {
+    return [lerp(a[0],b[0],n), lerp(a[1],b[1],n)] as XY
+}
+
 export function random() {
     let x = Math.sin(randomSeed) * 10000;
     randomSeed = (randomSeed + Math.E) % 1e8;
@@ -55,7 +60,7 @@ export function spread(range: number) {
     return range * (random() - 0.5);
 }
 
-export function coord2ind([x, y]: XY, width: number) {
+export function coord2ind([x, y]: XY, width: number = settings.width) {
     return ~~(x) + (~~y) * width;
 }
 
@@ -174,8 +179,6 @@ export type MapParams = {
     erosion: number
     riversShown: number
     randomiseHumidity: number
-    generatePhoto: boolean
-    shading: boolean
 }
 
 
@@ -521,7 +524,7 @@ function generateHumidity({ width, elevation, wind, steps }) {
 
     for (let i = 0; i < steps; i++) {
         let start: XY = [(i % 100 / 100) * width, (i % 10 / 10) * height];
-        let windThere = wind[coord2ind(start, width)];
+        let windThere = wind[coord2ind(start)];
         let end = [
             start[0] + (windThere * 0.3 * width) / 8,
             start[1] + (Math.abs(windThere) * 0.5 * height) / 12,
@@ -753,5 +756,4 @@ export function blendFast(a: LayeredMap, b: LayeredMap, n: number) {
     console.timeEnd("blend");
     return m;
 }
-
 

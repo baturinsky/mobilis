@@ -1,18 +1,24 @@
 import { mapToList, colorFromRGB16String, RGBA } from "./worldgen";
 
+export const categories = {} as any;
+
 export const scenario = {
-    d: `=DEPOSITS
+    rcst: [0,100,300,1000,3000],
+    wpy:169,
+    /**Distance multiplier */
+    dm: .1,
+    d: `=DEP
 🏔️ ores
 ⬛ coal
 🛢️ oil
 💧 water
 🗿 relic
-=PLANTS
+=PLNT
 🌿 grass
 🌲 taiga
 🌳 forest
 🌴 jungles
-=WILDLIFE
+=ANM
 🐏 ram
 🐂 yak
 🐎 mustang
@@ -20,73 +26,110 @@ export const scenario = {
 🐺 wolves
 🐗 hogs
 🐅 tigers
-=RESOURCES
+=RES
 👖 fabric
 🪵 wood
 🍎 food
 ⛽ fuel
 📙 book
-=TOOLS
+=TLS
 🛠️ tools
 ⛺ housing
 🛷 wagons
 🐴 horses
 ⚙️ engines
-🗡️ weapons`,
+🏹 weapons
+=BNS
+🥄 food consumption
+🔭 visibility range
+🗑️ food spoilage
+🎯 hunting bonus
+🍲 food happiness
+💗 happiness
+⚗️ research focus
+=WLD
+🐾 animals
+🍃 plants
+🌾 cropss
+=MOV
+🏃 walk
+⚓ swim
+=CALAMITY
+👹 goblin
+☣️ taint
+🌋 fracture`,
+
+
 
     st: `Foraging;Walking;Sticks`,
 
-    rr: `Foraging:1🍃>1🍎
-Walking:>🏃1
-Hunting:1🐾>1🍎1👖
-Fishing:1🐠>3🍎
-Sticks:1🍃>1🪵
-Mining:1🛠️1🏔️>1🪨
-Axes:1🍃1🛠️0.1🪨>3🪵
-Writing:>1📙
-Parchment:2👖>2📙
-Wigwam:1🪵3👖>⛺
-Paper:1🪵1🛠️>4📙
-Printing:1🪵2🛠️>10📙
-Archeology:1🗿1🛠️>30📙
-Tools:1🪵>1🛠️
-Metal Working:1🪵1🪨>1🛠️
-Rifles:1⚙️1⛽1🪨>1🏹
-Alloys:1⚙️1⛽1🪨>1⛺
-Cars:1⚙️1⛽1🪨>1🛒
-Hunting bows:3🐾1🏹>3🍎3👖
-Bows:>1🏹
-Traps:2🐾1🛠️>2🍎2👖
-Animal Husbandry:10🌿>10🍎
-Farms:3🌿>5🍎
-Plantations:3🌿>3👖
-Firewood:1🪵>1⛽
-Coal:1⬛>5⛽
-Drills:1⚙️⛽1⬛>10⛽
-Oil:1⚙️1⛽1🛢️>20⛽
-Greenhouse:1⛺1⛽>5🍎
-Fishing Nets:1🛠️1🐠>5🍎
-Whaling:1⚓1🛠️1🐋>10🍎
-Dog Taming:0.05🥄0.2🦊0.2💗
-Cat Taming:0.03🥄-0.2🗑️0.2💗
-Pottery:-0.2🗑️
-Conservation:-0.3🗑️
-Cooking:-0.1🗑️0.5💗🍎
-Mapmaking:0.25🔭
-Astronomy:0.25🔭
-Compass:0.25🔭
-Optics:0.25🔭
-Horse Herding:3🌿>1🐴
-Carts:1🛷>2🏃
-Horseback Riding:1🐴1🛷>4🏃
-Cars:1⚙️1⛽1🛷>10🏃
-Steam:1⚙️1⛽1🛷>10⚓
-Sails:1👖1🛷>3⚓`,
+    aka: { '🌾': '🍎' },
 
+
+    rr:
+        `=Land travel method
+0Walk:>1🏃
+0Ride:1🐴1🛷>4🏃0🐎0🐪
+0Drive:1⚙️1⛽1🛷>10🏃
+=Sea travel method
+0Swim:>0.1⚓
+0Sail:0.1👖1🛷>3⚓
+0Boat:1⚙️1⛽1🛷>10⚓
+=Jobs
+0Forage:1🍃>3🍎
+0Pick Sticks:1🍃>1🪵
+1Axe:1🍃1🛠️.1🪨>3🪵
+2Herd:10🍃>10🌾0🐂0🐗
+2Farm:3🍃>5🌾
+2Plantation:3🍃>3👖
+0Hunt:1🐾>3🍎1👖
+1Bow:3🐾1🏹>10🍎3👖
+1Trap:2🐾1🛠️>5🍎2👖
+0Fish:1🐠>10🍎
+1Fishing nets:1🛠️1🐠>15🍎
+3Whaling:1⚓1🛠️1🐋>30🍎
+1Tools:1🪵>1🛠️
+1Sharp Sticks:1🪵>.3🏹
+1Wheel:3🪵>1🛷
+1Wigwam:1🪵3👖>1⛺
+1Dig:1🛠️1🏔️>1🪨
+3Mine:1⚙️1⛽1🏔️>10⛽
+3Firewood:1🪵>1⛽
+3Coal:1⚙️1⛽1⬛>10⛽
+4Oil:1⚙️1⛽1🛢️>20⛽
+1Write:>.1📙0👖0🪵
+2Parchment:2👖>.2📙
+3Paper:1🪵1🛠️>.4📙
+4Print:1🪵2🛠️>1📙
+4Archeology:1🗿1🛠️>3📙
+1Horses:3🍃>1🐴0🐎0🐪
+2Metal Working:1🪵1🪨>3🛠️
+4Rifles:1⚙️1⛽1🪨>3🏹
+4Engines:3🛠️3🪨>1⚙️
+3Alloys:1⚙️1⛽1🪨>3⛺
+4Cars:1⚙️1⛽1🪨>1🛷
+4Greenhouse:1⛺1⛽>15🍎
+=Calamities
+4Kill goblins:1🏹1👹>1📙
+4Burn taint:1🛠️1⛽1☣️>1📙
+4Close fracture:1⚙️1⛽1🌋>1📙
+=Permanent bonuses
+1Tame Dogs:.05🥄.2🎯1💗0🐺
+1Tame Cats:.03🥄-.2🗑️1💗0🐅
+1Pottery:-.2🗑️0🍎
+2Conservation:-.3🗑️0🍎
+2Cooking:-.1🗑️.5🍲0🍎
+1Mapmaking:.25🔭0🏃
+2Astronomy:.25🔭0🏃
+3Compass:.25🔭0🏃
+4Optics:.25🔭0🏃
+1Research Focus:1⚗️0📙`,
+
+    /**animals per temperature and humidity */
     atc: "🐏,🐂,🐂,🐎,🐪,🐏,🐺,🐗,🐗,🐅",
 
+    /**multipliers*/
     m: {
-
         '🐾': `🐏:1🍎3👖
 🐂:3🍎1👖
 🐎:2🍎1👖
@@ -95,10 +138,10 @@ Sails:1👖1🛷>3⚓`,
 🐗:4🍎1👖
 🐅:1🍎2👖
 `,
-        '🍃': `🌿:2.5🍎0.5🪵1🌾
-🌲:1🍎2🪵0.3🌾
-🌳:2🍎1🪵0.5🌾
-🌴:1.5🍎1.5🪵0.3🌾`
+        '🍃': `🌿:2.5🍎0.5🪵1🌾1🐴1👖
+🌲:1🍎2🪵0.3🌾0.35🐴0.3👖
+🌳:2🍎1🪵0.5🌾0.5🐴0.3👖
+🌴:1.5🍎1.5🪵0.3🌾0.3🐴0.3👖`
     }
 }
 
