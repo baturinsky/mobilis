@@ -1,70 +1,127 @@
 <meta charset="utf-8">
 <style>
-  [data-rec] .rb{
+  body{
+    background: #024;
+    background-image: 
+    repeating-conic-gradient( #0000 0deg, #fff4 0.1deg, #0000 0.2deg, #0000 0.5deg, #fff4 0.51deg, #0000 0.52deg, #0000 10deg),
+    repeating-radial-gradient( #0000 0px, #fff4 1px, #024 2px, #0000 100px)
+    
+  }
+
+  red{
+    color:#c00;
+  }
+  .log{
+    padding: 1rem;
+  }
+
+  .foc {
     position: absolute;
-    right:0rem;
-    top:0.8rem;
-    border-radius: 0.5rem;    
-    background: #fff;
+    right: -0.1rem;
+    bottom: -0.1rem;
+    border-radius: 0.5rem;
+    background: #579;
     font-size: 0.8rem;
     pointer-events: all;
     z-index: 4;
+    box-shadow: 1px 1px #000;
   }
 
-  .rb:hover{
-    border-color: #aaa;
+  .foc:hover {
+    background: #afa;
   }
 
-  .un{
+  .foc[data-foc="true"] {
+    background: #4f4;
+  }
+
+  [data-red="true"] {
+    color: #c00;
+  }
+
+  [data-fls="true"] {
+    animation: blinker .5s linear infinite;
+  }
+
+  @keyframes blinker {
+  50% {
+    background: #8ff;
+  }
+}
+
+
+
+  .un {
     text-align: center;
     font-size: 1.5rem;
-    color: #0003;
+    color: #fff2;
     width: 10rem;
     height: 2rem;
     margin-bottom: -2rem;
   }
 
-  .r{
+  .r {
     display: flex;
     flex-direction: row;
     justify-content: space-between;
     margin: -2px 0 -4px 0;
     padding: 0;
     font-size: 0.6rem;
-   }
+  }
 
-  *{
+  * {
     font-family: Verdana;
   }
 
-  #recdiv{
+  #recdiv {
     width: 30rem;
+    padding: 0.2rem;
+    border: solid 1px #000;
+    border-radius: 0 0.5rem 0.5rem 0;
+    background: #246;
+    color: #fff;
   }
 
-  #res{
+  .resl{
+    letter-spacing: -5px;
+  }
+
+  .res {
     display: flex;
     flex-direction: row;
-    flex-wrap: wrap;
+  }
+  .res>div{
+    width: 2rem;
+    text-align: center;
+    font-size: 0.8rem;
   }
 
-  [data-rec]{
+  [data-rec] {
     position: relative;
-    border: #888 solid 1px;
     cursor: pointer;
     width: 10rem;
     letter-spacing: -1px;
     padding: 1px;
+    height: 2.1rem;
   }
 
-  button *{
+  button{
+    cursor: pointer;
+    color: #fff;
+    background: #357;
+    border: #fff4 solid 1px;
+  }
+
+
+  button * {
     pointer-events: none;
   }
 
-  button:hover{
+  button:hover {
     border-color: #fff;
   }
 
-  p{
+  p {
     margin: -2px 0 -4px 0;
     padding: 0;
     font-size: 0.6rem;
@@ -72,42 +129,42 @@
     color: #888;
   }
 
-  span{
+  span {
     margin: 2px;
     letter-spacing: -2px;
     text-align: center;
   }
 
-  #ps{
+  #ps {
     position: relative;
     z-index: 2;
   }
 
   @media (max-width: 1600px) {
-    #f{
+    #f {
       display: none;
     }
   }
 
-  center{
+  center {
     font-size: 50%;
     margin-top: -0.2rem;
     pointer-events: none;
   }
 
-  input{
-    width:150px !important;
+  input {
+    width: 150px !important;
   }
 
-  canvas {    
-  }
+  canvas {}
 
-  #main{
+  #main {
     overflow: hidden;
     position: relative;
+    border: solid 1px #000;
   }
 
-  .poi{
+  .poi {
     position: absolute;
     cursor: pointer;
     text-shadow: 0.5px 1px#000;
@@ -119,21 +176,26 @@
     border-radius: 0.5rem 0;
   }
 
+  .poi center{
+    font-size: 0.7rem;
+  }
+
   .poi[data-cur='true'] {
     border: 3px solid #000;
     border-radius: 0;
     z-index: 3;
   }
 
-  *[data-sel='true'] {
-    background: #fff;
-  }
-
   *[data-use='false'] {
-    background: #ddd;
+    background: #024;
   }
 
-  #main canvas{
+  *[data-sel='true'] {
+    background: #68a;
+  }
+
+
+  #main canvas {
     image-rendering: pixelated;
     transform-origin: 0px 0px;
   }
@@ -167,6 +229,7 @@
     margin: 1em;
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
+    background: #fff;
   }
 
   #map {
@@ -202,24 +265,17 @@
   .tilesheet {
     display: none;
   }
-
 </style>
 
 <body>
   <div class="all">
-    <div>      
+    <div>
       <div id="main">
         <div id="ps"></div>
       </div>
       <div id="miniMaps"></div>
     </div>
     <div id="recdiv">
-    </div>
-    <div id=f>
-      <form id="form" onchange=applySettings()></form>
-      <button id="resetSettings">Reset to default</button>
-      <div>blend maps</div>
-      <input class="number" type="number" id="blendMaps" min="0" max="1" step="0.05" value="0">
     </div>
   </div>
   <div id="tooltip">tooltip</div>

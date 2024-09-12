@@ -220,3 +220,42 @@ Cattle + pasture => more Cattle
 
 🪨metals - depends on tectonics
 🛢️fuel - random
+
+
+
+== GUIDE ==
+
+Use recipe buttons on the right to gather and craft resources. 
+You can use both your own resources and resources in the location your are in.
+Recipes with 🐾 and 🍃can work differently  with different resources.
+Use map on the left to travel between locations. Each location has a stock of one type resources to use in recipes.
+
+You can choose the method of movement on land and sea (two top rows of the buttons). 
+Default ones are free except the time, other costs fuel and needs transport. 
+You should have enough transport for each pop, and enough fuel to reach the destination.
+
+"Tool" type resources (🛠️ tools,⛺ housing,🛷 wagons,🐴 horses,⚙️ engines and 🏹 weapons)
+are expended only at 10% of listed at recipe rate (for amortization). 
+But you need to have enough of them for each pop to work at 100% effect.
+
+This planet is always in motion, resources apear and disappear. 
+Except for "Calamities" - 👹 goblin, ☣️ taint and🌋 fracture are semipermanent and you will need to remove them,
+or there will be no place for other resources on the map.
+
+Most of the actions are locked until researched. 
+You gradually research them by just having resources shown in top right of the button in store (or in location).
+Having 📙 resource advances all research, bust especially the one with Research Focus ⚗️ selected.
+Recipes can be researched past the unlocking, granting production bonuses.
+
+Food 🍎 is used at rate of one per pop. If you don't have enough, you will lose pop fast.
+
+Each resources in stock increases pop 💗 happiness. Bigger happiness lead to increase of the population.
+
+Each resource have weight which increases transportation cost and time. 
+1% of resources are used up each week. 
+
+
+
+
+
+

@@ -274,8 +274,10 @@ export function generateTerrain(params: MapParams) {
 }
 
 export function generateMap(params: MapParams, terrain?: Terrain): LayeredMap {
+    console.time("generateMap");
     terrain ??= generateTerrain(params);
     let lm = generateAtmosphere(params, terrain);
+    console.timeEnd("generateMap");
     return lm;
 }
 

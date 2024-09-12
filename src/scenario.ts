@@ -3,7 +3,20 @@ import { mapToList, colorFromRGB16String, RGBA } from "./worldgen";
 export const categories = {} as any;
 
 export const scenario = {
-    rcst: [0,100,300,1000,3000],
+    popspd:0.01,
+    /**POI deposit sizes */
+    psz: 1000,
+    /**Blended maps per cycle */
+    blnd:13,
+    /** Total pois */
+    pois:300,
+    /**research speed */
+    rspd:1,
+    /**res wasted per week */
+    amrt:0.01,
+    /**research per tier */
+    rcst: [100,100,300,1000,3000],
+    /**weeks per year */
     wpy:169,
     /**Distance multiplier */
     dm: .1,
@@ -13,7 +26,7 @@ export const scenario = {
 🛢️ oil
 💧 water
 🗿 relic
-=PLNT
+=PLN
 🌿 grass
 🌲 taiga
 🌳 forest
@@ -40,12 +53,12 @@ export const scenario = {
 ⚙️ engines
 🏹 weapons
 =BNS
+💕 happiness bonus
 🥄 food consumption
 🔭 visibility range
 🗑️ food spoilage
 🎯 hunting bonus
 🍲 food happiness
-💗 happiness
 ⚗️ research focus
 =WLD
 🐾 animals
@@ -54,11 +67,16 @@ export const scenario = {
 =MOV
 🏃 walk
 ⚓ swim
-=CALAMITY
+=CAL
 👹 goblin
 ☣️ taint
-🌋 fracture`,
-
+🌋 fracture
+=MSC
+💗 happiness
+📅 week
+👨‍👩‍👦‍👦 pop
+🏋 weight
+`,
 
 
     st: `Foraging;Walking;Sticks`,
@@ -76,18 +94,18 @@ export const scenario = {
 0Sail:0.1👖1🛷>3⚓
 0Boat:1⚙️1⛽1🛷>10⚓
 =Jobs
-0Forage:1🍃>3🍎
+0Forage:1🍃>1🍎
 0Pick Sticks:1🍃>1🪵
 1Axe:1🍃1🛠️.1🪨>3🪵
-2Herd:10🍃>10🌾0🐂0🐗
-2Farm:3🍃>5🌾
+2Herd:10🍃>10🌾!0🐂0🐏0🐗0🌿
+2Farm:3🍃>5🌾0🌿
 2Plantation:3🍃>3👖
-0Hunt:1🐾>3🍎1👖
-1Bow:3🐾1🏹>10🍎3👖
-1Trap:2🐾1🛠️>5🍎2👖
-0Fish:1🐠>10🍎
-1Fishing nets:1🛠️1🐠>15🍎
-3Whaling:1⚓1🛠️1🐋>30🍎
+0Hunt:1🐾>1🍎1👖!0🐾
+1Bow:3🐾1🏹>3🍎3👖!0🐾0🏹
+1Trap:2🐾1🛠️>2🍎2👖!0🐾0🛠️
+0Fish:1🐠>3🍎!0🐠
+1Fishing nets:1🛠️1🐠>5🍎!0🐠
+3Whaling:1⚓1🛠️1🐋>10🍎!0🐋
 1Tools:1🪵>1🛠️
 1Sharp Sticks:1🪵>.3🏹
 1Wheel:3🪵>1🛷
@@ -102,23 +120,23 @@ export const scenario = {
 3Paper:1🪵1🛠️>.4📙
 4Print:1🪵2🛠️>1📙
 4Archeology:1🗿1🛠️>3📙
-1Horses:3🍃>1🐴0🐎0🐪
+1Horses:3🍃>1🐴!0🐎0🐪0🐴
 2Metal Working:1🪵1🪨>3🛠️
 4Rifles:1⚙️1⛽1🪨>3🏹
 4Engines:3🛠️3🪨>1⚙️
 3Alloys:1⚙️1⛽1🪨>3⛺
 4Cars:1⚙️1⛽1🪨>1🛷
-4Greenhouse:1⛺1⛽>15🍎
+4Greenhouse:1⛺1⛽>5🍎
 =Calamities
 4Kill goblins:1🏹1👹>1📙
 4Burn taint:1🛠️1⛽1☣️>1📙
 4Close fracture:1⚙️1⛽1🌋>1📙
 =Permanent bonuses
-1Tame Dogs:.05🥄.2🎯1💗0🐺
-1Tame Cats:.03🥄-.2🗑️1💗0🐅
+1Tame Dogs:.05🥄.2🎯.05💕0🐺
+1Tame Cats:.03🥄-.2🗑️.05💕0🐅
 1Pottery:-.2🗑️0🍎
 2Conservation:-.3🗑️0🍎
-2Cooking:-.1🗑️.5🍲0🍎
+0Cooking:-.1🗑️-.1🥄1🍲0🍎
 1Mapmaking:.25🔭0🏃
 2Astronomy:.25🔭0🏃
 3Compass:.25🔭0🏃

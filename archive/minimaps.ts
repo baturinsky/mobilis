@@ -203,53 +203,9 @@ function lerpMaps(a: LayeredMap, b: LayeredMap, n: number, fields?: string[]) {
   return c
 }
 
-declare var blendMaps: HTMLInputElement;
-
-blendMaps.onchange = (e => {
-  let n = Number(blendMaps.value);
-  if (mapList.length >= 2) {
-    console.time("blend");
-    let terrain = lerpMaps(mapList[mapList.length - 2], mapList[mapList.length - 1], n, ["dryElevation", "tectonic"]) as Terrain;
-    console.timeEnd("blend");
-    console.time("blendGen");
-    let blend = generateMap(mapParams, terrain);
-    console.timeEnd("blendGen");
-    renderMap(blend);
-  }
-})
 
 let tips = {};
 
-function rebuildForm() {
-  let form = document.getElementById("form") as HTMLFormElement;
-  form.innerHTML = "";
-
-  for (let param of parameters) {
-    let [id, type, also] = param;
-    also = also || {};
-    tips[id] = also.tip;
-    switch (type) {
-      case "tip":
-        form.innerHTML += `<div class="tip">${id}</div>`;
-        break;
-      case "checkbox":
-        form.innerHTML += `<div>${id}</div><input class="checkbox" type="checkbox" id="${id}" ${settings[id] ? "checked" : ""
-          } />`;
-        break;
-      case "number":
-        form.innerHTML += `<div>${id}</div><input class="number" type="number" id="${id}" value="${settings[id]}" />`;
-        break;
-      case "range":
-        let min = also.min || 0;
-        let max = also.max || 1;
-        let step = also.step || (max - min) / 100;
-        form.innerHTML += `<div>${id}</div><input class="range" type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${settings[id]}"/>
-        <div id="${id}_value"></div>
-        `;
-        break;
-    }
-  }
-}
 
 function saveSettings() {
   document.location.hash = Object.keys(settings)
@@ -467,3 +423,31 @@ function generate(params) {
 }
 
 
+
+function init() {
+  parsePedia()
+
+  if (document.location.hash) {
+    settings = {} as MapParams;
+    let records = document.location.hash
+      .substr(1)
+      .split("&")
+      .map((s) => s.split("="));
+    for (let ss of records) {
+      settings[ss[0]] =
+        (ss[1] == "false" ? false : ss[1] == "true" ? true : Number(ss[1])) as any;
+    }
+    console.log(settings);
+  }
+
+  if (!settings || !settings.width)
+    settings = JSON.parse(localStorage.mapGenSettings)
+  if (!settings || !settings.width)
+    settings = { ...defaultSettings };
+
+  applySettings();
+  game = initGame(settings.seed);
+  populate(game.poi)
+  renderMap();
+  render();
+}

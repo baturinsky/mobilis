@@ -1,7 +1,7 @@
 "use strict";
 
-import { initGame, mult, Poi, poiLeft, Recipe, recipes, Game, parsePedia, populate, travelToP, setLocalRecipes, tryToUse, travelSteps, travelCost, travelWeight, recipeUseable, happiness, recipeGroupStartingWith } from "./game";
-import { scenario } from "./scenario";
+import { initGame, mult, Poi, poiLeft, Recipe, recipes, Game, parsePedia, populate, travelToP, setCurrentRecipes, tryToUse, travelSteps, travelCost, travelWeight, recipeUseable, happiness, recipeGroupStartingWith, advanceTimeByWeeks, currentWeek, currentRecipes, tierCost, mapsCache } from "./game";
+import { categories, scenario } from "./scenario";
 import {
   data2image, rescaleImage, generateMap, ShowMapF, LayeredMap, RGBA,
   XY, coord2ind, blendFull,
@@ -11,7 +11,7 @@ import {
 declare var main: HTMLCanvasElement, tooltip: HTMLDivElement, recdiv: HTMLDivElement, ps: HTMLDivElement;
 declare var blendMaps: HTMLInputElement;
 
-let m: LayeredMap;
+export let m: LayeredMap;
 let mapList: LayeredMap[] = []
 let mapScroll = [0, 0];
 let mouseAt: XY;
@@ -21,6 +21,13 @@ let zoom = 1;
 let poiPointed: Poi | undefined;
 
 export let game: Game;
+
+
+let log: string[] = [];
+
+export function report(t: string) {
+  log.push(t)
+}
 
 const biomeNames = [
   "unknown",
@@ -43,155 +50,43 @@ const biomeNames = [
   "ocean"
 ];
 
-const parameters: [string, string, { tip?: string, min?: number, max?: number, step?: number }?][] = [
-  ["seed", "number"],
-  ["noiseSeed", "number"],
-  ["width", "number"],
-  ["height", "number"],
-  [
-    "noiseSmoothness",
-    "range",
-    { max: 10, step: 0.5 },
-  ],
-  [
-    "tectonicSmoothness",
-    "range",
-    {
-      max: 10,
-      step: 0.5
-    },
-  ],
-  [
-    "noiseFactor",
-    "range",
-    {
-      min: -5,
-      max: 20,
-      step: 0.5
-    },
-  ],
-  [
-    "crustFactor",
-    "range",
-    {
-      min: -5,
-      max: 20,
-      step: 0.5
-    },
-  ],
-  [
-    "tectonicFactor",
-    "range",
-    {
-      min: -1,
-      max: 10,
-      step: 0.1
-    },
-  ],
-  [
-    "pangaea",
-    "range",
-    {
-      min: -5,
-      max: 5
-    },
-  ],
-  ["seaRatio", "range", { tip: "Sea percentage" }],
-  [
-    "flatness",
-    "range"
-  ],
-  ["randomiseHumidity", "checkbox"],
-  ["averageTemperature", "range", { min: -30, max: 50, step: 1 }],
-  ["elevationCold", "range", { min: 0, max: 300, step: 1 }],
-  [
-    "erosion",
-    "range",
-    { max: 100000 },
-  ],
-  [
-    "riversShown",
-    "range",
-    {
-      max: 1000
-    },
-  ],
-  ["biomeScrambling", "range"],
-  ["squareGrid", "checkbox"],
-  ["gameMapScale", "range", { min: 0, max: 4, step: 1 }],
-  [
-    "gameMapRivers",
-    "range",
-    {
-      max: 50000,
-      step: 1000
-    },
-  ],
-  ["discreteHeights", "range", { max: 40, step: 1 }],
-];
-
-let defaultSettings = {
-  mapMode: 0,
-  seed: 1,
-  width: 640,
-  height: 640,
-  scale: 1,
-  noiseFactor: 10,
-  crustFactor: 6,
-  tectonicFactor: 3,
-  noiseSmoothness: 2,
-  tectonicSmoothness: 5,
-  pangaea: 0,
-  seaRatio: 0.55,
-  flatness: 0.5,
-  randomiseHumidity: 0,
-  averageTemperature: 15,
-  erosion: 50000,
-  riversShown: 400,
-  biomeScrambling: 0,
-  terrainTypeColoring: 0,
-  discreteHeights: 0,
-  hillRatio: 0.12,
-  mountainRatio: 0.04,
-  gameMapRivers: 15000,
-  gameMapScale: 2,
-  generatePhoto: 1,
-  squareGrid: 0,
-  noiseSeed: 0,
-  elevationCold: 0,
-  shading: true
+export let settings = {
+  "seed": 7,
+  "width": 700,
+  "height": 700,
+  "scale": 1,
+  "noiseFactor": 11.5,
+  "crustFactor": 5.5,
+  "tectonicFactor": 2.9,
+  "noiseSmoothness": 1,
+  "tectonicSmoothness": 8.5,
+  "pangaea": -1.5,
+  "seaRatio": 0.47,
+  "flatness": 0.09,
+  "randomiseHumidity": 0,
+  "averageTemperature": 19,
+  "erosion": 10000,
+  "riversShown": 150,
+  "biomeScrambling": 0.24,
+  "terrainTypeColoring": 0,
+  "discreteHeights": 0,
+  "hillRatio": 0.12,
+  "mountainRatio": 0.04,
+  "gameMapRivers": 15000,
+  "gameMapScale": 2,
+  "generatePhoto": 1,
+  "squareGrid": 0,
+  "generateTileMap": 0,
+  "noiseSeed": 1,
+  "elevationCold": 53,
+  "shading": 1
 } as MapParams;
-
-export let settings = {} as MapParams;
 
 function init() {
   parsePedia()
 
-  if (document.location.hash) {
-    settings = {} as MapParams;
-    let records = document.location.hash
-      .substr(1)
-      .split("&")
-      .map((s) => s.split("="));
-    console.log(records);
-    for (let ss of records) {
-      settings[ss[0]] =
-        (ss[1] == "false" ? false : ss[1] == "true" ? true : Number(ss[1])) as any;
-    }
-    console.log(settings);
-  }
-
-  if (!settings || !settings.width)
-    settings = JSON.parse(localStorage.mapGenSettings)
-  if (!settings || !settings.width)
-    settings = { ...defaultSettings };
-
-  rebuildForm();
-
-  applySettings();
   game = initGame(settings.seed);
-  m = generateGameMap(0, settings);
-  game.poi = populate(m)
+  populate(game.poi)
   renderMap();
   render();
 }
@@ -202,44 +97,41 @@ document.addEventListener("mousedown", e => {
 });
 
 
-function applySettings() {
-  for (let [id, type] of parameters) {
-    if (type == "tip") continue;
-    let element = document.getElementById(id) as HTMLInputElement;
-    settings[id] =
-      element.type == "checkbox" ? element.checked ? 1 : 0 : Number(element.value);
-    let id_value = document.getElementById(id + "_value");
-    if (id_value) id_value.innerText = String(settings[id]).substr(0, 8);
-  }
-
-  saveSettings();
-
-  //generate(settings);
-}
 
 window.onload = init;
-window["applySettings"] = applySettings;
 
-document.body.addEventListener("mousedown", e => {
-  switch ((e.target as HTMLElement)?.id) {
-    case "resetSettings":
-      settings = { ...defaultSettings };
-      rebuildForm();
-      applySettings();
-      return
-  }
+Object.assign(window, {
+  give: a => { 
+    game.store[a] += 100;
+    render()
+  },
+  foc: a => {
+    if (game.focus != a) {
+      game.focus = a;
+      advanceTimeByWeeks()
+    }
+  },
+  save: n => {
+    if (n != 0)
+      if (!confirm(`Save to ${n}?`))
+        return;
+    let s = JSON.stringify({ ...game, home: game.poi.indexOf(game.home as any) }, null, 2)
+    localStorage.setItem("temo" + n, s)
+    report("Saved")
+  },
+  load: n => {
+    let data = localStorage.getItem("temo" + n);
+    if (data) {
+      game = JSON.parse(data)
+      game.home = game.poi[game.home as any];
+      setMap(generateGameMap(game.date));
+      centerMap()
+      report("Loaded")
+    }
+  },
 })
 
 
-
-blendMaps.onchange = (e => {
-  let n = Number(blendMaps.value);
-  if (mapList.length >= 2) {
-    m = blendFull(mapList[mapList.length - 2], mapList[mapList.length - 1], n);
-    //let blend = blendFast(mapList[mapList.length - 2], mapList[mapList.length - 1], n);    
-    renderMap();
-  }
-})
 
 let tips = {};
 
@@ -274,13 +166,6 @@ function rebuildForm() {
   }
 }
 
-function saveSettings() {
-  document.location.hash = Object.keys(settings)
-    .map((k) => `${k}=${settings[k]}`)
-    .join("&");
-
-  localStorage.mapGenSettings = JSON.stringify(settings);
-}
 
 let mainCanvas: HTMLCanvasElement;
 
@@ -358,7 +243,6 @@ main.onwheel = (e) => {
   console.log(zoom, mapScroll);
   let half = settings.width / 2;
 
-
   mapScroll[0] = (mapScroll[0] - half) * 2 ** (zoom - old) + half;
   mapScroll[1] = (mapScroll[1] - half) * 2 ** (zoom - old) + half;
 
@@ -373,7 +257,7 @@ function poiText(i: number) {
   let tc = travelCost(m, p, game.home)
   return `<div class=poi id=poi${i}>
 ${p.kind}<center style=color:rgb(${15 * p.temp - 400},50,${-20 * p.temp + 100})>${~~poiLeft(p)}
-${!game.home || p==game.home?"":`<br/>${recipeToText(ts)}<br/>${recipeToText(tc)}`}</center>
+${!game.home || p == game.home ? "" : `<br/>${recipeToText(ts)}<br/>${recipeToText(tc)}`}</center>
 </div>`
 }
 
@@ -398,12 +282,22 @@ export function fix(n) {
 }
 
 function recipeToText(r) {
-  return r ? Object.keys(r).map(k => `${fix(r[k])}${k}`).join(" ") : ""
+  return r ? Object.keys(r).map(k => `<num data-red='${game.store[k] < 0.1}'>${fix(r[k])}</num>${k}`).join(" ") : ""
+}
+
+export function centerMap(){
+  let half = settings.width / 2;
+  if (game.home) {
+    mapScroll[0] = (- game.home.at[0] * 2 ** zoom + half) * devicePixelRatio
+    mapScroll[1] = (- game.home.at[1] * 2 ** zoom + half) * devicePixelRatio
+  }
 }
 
 export function render() {
   if (!game)
     return;
+
+  setCurrentRecipes();
 
   //mainCanvas.style.transformOrigin = `${mapScroll[0]}px ${mapScroll[1]}px`
   mainCanvas.style.transform = `translate(${mapScroll[0]}px, ${mapScroll[1]}px) scale(${2 ** zoom})`
@@ -428,43 +322,60 @@ export function render() {
       d.onmouseover = () => { poiPointed = p; };
       d.onmouseleave = () => { poiPointed = undefined; };
       d.onmousedown = () => {
+        if (game.home) {
+          let tc = travelCost(m, p, game.home)
+          if (tc.fail) {
+            report("Unreachable")
+            return
+          }
+        }
+
         travelToP(p)
         render()
-        mapScroll[0] = (- p.at[0] * 2 ** zoom + half) * devicePixelRatio
-        mapScroll[1] = (- p.at[1] * 2 ** zoom + half) * devicePixelRatio
       }
     }
   }
 
-  setLocalRecipes()
+  setCurrentRecipes()
   game.bonus["💗"] = happiness();
 
-  let barCont = {'👨‍👩‍👦‍👦':game.pop, '🏋':travelWeight(), '📅': fix(game.date * scenario.wpy), 
-    ...game.bonus,
-    ...game.store}
+
+  let barCont = [{
+    '👨‍👩‍👦‍👦': game.pop, '🏋': travelWeight(), '📅': currentWeek(),
+    ...game.bonus
+  }, {
+    ...game.store
+  }]
+
+  let i, svs = '';
+  for (i = 1; localStorage.getItem("temo" + i); i++) {
+    svs += `<button onmousedown=save(${i})>Save ${i}</button><button onmousedown=load(${i})>Load ${i}</button>`
+  }
+  svs += `<button onmousedown=save(${i})>Save ${i}</button>`
 
   recdiv.innerHTML =
-    "<div id=res>" +
-    Object.keys(barCont).map(k => ([k,~~barCont[k]])).map(a => 
-      `<span onmousedown="give('${a[0]}')">${a.join("<br/>")}</span>`
-    ).join("") + "</div>" +
-    Object.values(game.cr).map(r => {
+    barCont.map(bc => "<div class=res>" + Object.keys(bc).map(k => ([k, ~~bc[k]])).map(a =>
+      `<div onmousedown="give('${a[0]}')">${a.join("<br/>")}</div>`
+    ).join("") + "</div>").join("") +
+    Object.values(currentRecipes).map(r => {
       let to = recipeToText(r.to);
       let rg = recipeGroupStartingWith[r.name];
-      let known = r.cost == 0;
-      return (rg?`<div>${rg}</div>`:"")+
-`<button data-sel=${game.sel.has(r.name)} data-rec="${r.name}" data-use="${known && recipeUseable(r.name)}" >
-<div class=rb>⚗️</div> 
-${!known?`<div class=un>UNKNOWN</div>`:''}
-${`<div class=r><div>${r.name}</div><div>${r.cost}⚗️↩${Object.keys(r.bonus)}</div></div>
+      let known = game.tech[r.name] > 0;
+      return (rg ? `<div>${rg}</div>` : "") +
+        `<button data-sel=${game.sel[r.name]} data-rec="${r.name}" data-use="${known && recipeUseable(r.name)}" >
+${(game.bonus[`⚗️`]) ? `<div class=foc data-foc="${game.focus == r.name}" onmousedown=foc('${r.name}')>⚗️</div>` : ''}
+${!known ? `<div class=un>UNKNOWN</div>` : ''}
+${`<div class=r><div>${r.name} ${game.tech[r.name] || ''}</div>
+<div>${~~(tierCost(r.name) - game.research[r.name])}<span class=resl>⚗️↩${Object.keys(r.research).join('')}</span></div></div>
 <span class=rec>${recipeToText(r.from)}${to ? '🡢 ' + to : ''}</span>`}
-</button>`}).join("");
+</button>`}).join("")
+    + "<p class=log>" + log.slice(log.length - 20).join(" ✦ ") + "</p>"
+    + svs + `<button data-fls=${game?.date == 0 && hasAuto} onmousedown=load(0)>Load autosave</button>`
+    ;
 }
 
-window["give"] = a=>{
-  game.store[a] += 100;
-  render()
-}
+let hasAuto = !!localStorage.getItem("temo0")
+
 
 function generate(params) {
   console.time("generation total");
@@ -476,19 +387,28 @@ function generate(params) {
   console.timeEnd("generation total");
 }
 
-export function generateGameMap(date: number) {
+export function setMap(nm: LayeredMap) {
+  m = nm;
+  renderMap();
+  return m
+}
+
+export function generateGameMap(date: number = game.date) {
   let before = ~~date;
   if (before != date)
-    date = before + ~~((date % 1) * 13) / 13;
-  if (game.maps[date])
-    return game.maps[date];
+    date = before + ~~((date % 1) * scenario.blnd) / scenario.blnd;
+  if (mapsCache[date])
+    return mapsCache[date];
   if (before == date) {
-    game.maps[date] = generateMap({ ...settings, seed: game.seed + date });
-    return game.maps[date]
+    mapsCache[date] = generateMap({ ...settings, seed: game.seed + date });
+    return mapsCache[date]
   }
-  let [a, b] = [generateGameMap(before, settings), generateGameMap(before + 1, settings)];
+  console.time("blend");
+  let [a, b] = [generateGameMap(before), generateGameMap(before + 1)];
   let blend = blendFull(a, b, date - before);
-  console.timeEnd("generation total");
+  report("map updated")
+  mapsCache[date] = blend;
+  console.timeEnd("blend");
   return blend;
 }
 

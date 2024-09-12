@@ -217,8 +217,10 @@
     return { dryElevation, tectonic, p: params };
   }
   function generateMap(params, terrain) {
+    console.time("generateMap");
     terrain ??= generateTerrain(params);
     let lm = generateAtmosphere(params, terrain);
+    console.timeEnd("generateMap");
     return lm;
   }
   function generateAtmosphere(params, terrain) {
@@ -533,7 +535,20 @@
   // src/scenario.ts
   var categories = {};
   var scenario2 = {
-    rcst: [0, 100, 300, 1e3, 3e3],
+    popspd: 0.01,
+    /**POI deposit sizes */
+    psz: 1e3,
+    /**Blended maps per cycle */
+    blnd: 13,
+    /** Total pois */
+    pois: 300,
+    /**research speed */
+    rspd: 1,
+    /**res wasted per week */
+    amrt: 0.01,
+    /**research per tier */
+    rcst: [100, 100, 300, 1e3, 3e3],
+    /**weeks per year */
     wpy: 169,
     /**Distance multiplier */
     dm: 0.1,
@@ -543,7 +558,7 @@
 🛢️ oil
 💧 water
 🗿 relic
-=PLNT
+=PLN
 🌿 grass
 🌲 taiga
 🌳 forest
@@ -570,12 +585,12 @@
 ⚙️ engines
 🏹 weapons
 =BNS
+💕 happiness bonus
 🥄 food consumption
 🔭 visibility range
 🗑️ food spoilage
 🎯 hunting bonus
 🍲 food happiness
-💗 happiness
 ⚗️ research focus
 =WLD
 🐾 animals
@@ -584,10 +599,16 @@
 =MOV
 🏃 walk
 ⚓ swim
-=CALAMITY
+=CAL
 👹 goblin
 ☣️ taint
-🌋 fracture`,
+🌋 fracture
+=MSC
+💗 happiness
+📅 week
+👨‍👩‍👦‍👦 pop
+🏋 weight
+`,
     st: `Foraging;Walking;Sticks`,
     aka: { "🌾": "🍎" },
     rr: `=Land travel method
@@ -599,18 +620,18 @@
 0Sail:0.1👖1🛷>3⚓
 0Boat:1⚙️1⛽1🛷>10⚓
 =Jobs
-0Forage:1🍃>3🍎
+0Forage:1🍃>1🍎
 0Pick Sticks:1🍃>1🪵
 1Axe:1🍃1🛠️.1🪨>3🪵
-2Herd:10🍃>10🌾0🐂0🐗
-2Farm:3🍃>5🌾
+2Herd:10🍃>10🌾!0🐂0🐏0🐗0🌿
+2Farm:3🍃>5🌾0🌿
 2Plantation:3🍃>3👖
-0Hunt:1🐾>3🍎1👖
-1Bow:3🐾1🏹>10🍎3👖
-1Trap:2🐾1🛠️>5🍎2👖
-0Fish:1🐠>10🍎
-1Fishing nets:1🛠️1🐠>15🍎
-3Whaling:1⚓1🛠️1🐋>30🍎
+0Hunt:1🐾>1🍎1👖!0🐾
+1Bow:3🐾1🏹>3🍎3👖!0🐾0🏹
+1Trap:2🐾1🛠️>2🍎2👖!0🐾0🛠️
+0Fish:1🐠>3🍎!0🐠
+1Fishing nets:1🛠️1🐠>5🍎!0🐠
+3Whaling:1⚓1🛠️1🐋>10🍎!0🐋
 1Tools:1🪵>1🛠️
 1Sharp Sticks:1🪵>.3🏹
 1Wheel:3🪵>1🛷
@@ -625,23 +646,23 @@
 3Paper:1🪵1🛠️>.4📙
 4Print:1🪵2🛠️>1📙
 4Archeology:1🗿1🛠️>3📙
-1Horses:3🍃>1🐴0🐎0🐪
+1Horses:3🍃>1🐴!0🐎0🐪0🐴
 2Metal Working:1🪵1🪨>3🛠️
 4Rifles:1⚙️1⛽1🪨>3🏹
 4Engines:3🛠️3🪨>1⚙️
 3Alloys:1⚙️1⛽1🪨>3⛺
 4Cars:1⚙️1⛽1🪨>1🛷
-4Greenhouse:1⛺1⛽>15🍎
+4Greenhouse:1⛺1⛽>5🍎
 =Calamities
 4Kill goblins:1🏹1👹>1📙
 4Burn taint:1🛠️1⛽1☣️>1📙
 4Close fracture:1⚙️1⛽1🌋>1📙
 =Permanent bonuses
-1Tame Dogs:.05🥄.2🎯1💗0🐺
-1Tame Cats:.03🥄-.2🗑️1💗0🐅
+1Tame Dogs:.05🥄.2🎯.05💕0🐺
+1Tame Cats:.03🥄-.2🗑️.05💕0🐅
 1Pottery:-.2🗑️0🍎
 2Conservation:-.3🗑️0🍎
-2Cooking:-.1🗑️.5🍲0🍎
+0Cooking:-.1🗑️-.1🥄1🍲0🍎
 1Mapmaking:.25🔭0🏃
 2Astronomy:.25🔭0🏃
 3Compass:.25🔭0🏃
@@ -712,10 +733,18 @@
   var dict;
   var recipes;
   var mult = {};
+  var mapsCache = [];
+  var currentRecipes;
   function poiLeft(p) {
-    return ~~(p.size * 1e3 * Math.sin(p.age * 3.14) - p.taken);
+    return ~~(p.size * scenario2.psz * Math.sin(clamp(0, 1, p.age) * 3.14) - p.taken);
   }
-  function generatePoi(m2, at) {
+  function generatePoi(m2, pois, date) {
+    let at = [~~(random() * m2.p.width), ~~(random() * m2.p.height)];
+    for (let op of pois) {
+      if (dist(op.at, at) < 10) {
+        return;
+      }
+    }
     let i = coord2ind(at);
     let biome = m2.biome[i];
     let kind;
@@ -742,7 +771,8 @@
         }
       }
     }
-    let p = { at, kind, size, taken: 0, age: random(), temp: m2.temperature[i] };
+    let p = { at, kind, size, taken: 0, age: random(), temp: m2.temperature[i], ageByWeek: 0.01 };
+    pois.push(p);
     return p;
   }
   function strToObj(s) {
@@ -761,25 +791,35 @@
         return null;
       }
       let cost = Number(v[0]);
-      let bonus = {};
-      let [name, ...etc] = v.slice(cost >= 0 ? 1 : 0).split(/[:>]/);
+      let research2 = {};
+      let [name, ...etc] = v.slice(cost >= 0 ? 1 : 0).split(/[:>\!]/);
       if (groupName) {
         recipeGroupStartingWith[name] = groupName;
         groupName = void 0;
       }
       if (!etc)
         debugger;
-      let [from, to] = etc.map(strToObj).map((a) => {
+      let [from, to, tech] = etc.map(strToObj).map((a, i) => {
+        let addToRes = etc.length <= 2 || i == 2;
         for (let k in a) {
-          if (!categories.BNS[k] && !categories.WLD[k])
-            bonus[k] = 1;
+          if (!categories.BNS[k] && addToRes) {
+            if (scenario2.aka[k]) {
+              research2[scenario2.aka[k]] = 1;
+            } else if (scenario2.m[k]) {
+              for (let o in mult[k]) {
+                research2[o] = 1;
+              }
+            } else {
+              research2[k] = 1;
+            }
+          }
           if (a[k] == 0) {
             delete a[k];
           }
         }
         return a;
       }).filter((v2) => v2);
-      return short ? [name, from] : [name, { from, to, t: v, name, cost, bonus }];
+      return short ? [name, from] : [name, { from, to, t: v, name, cost, research: research2 }];
     }).filter((v) => v));
   }
   function parsePedia() {
@@ -804,59 +844,74 @@
       pop: 100,
       store: Object.fromEntries(Object.keys(dict).filter((k) => categories.RES[k] || categories.TLS[k]).map((k) => [k, 0])),
       bonus: Object.fromEntries(Object.keys(categories.BNS).map((k) => [k, 0])),
-      sel: /* @__PURE__ */ new Set(["Walk", "Swim"]),
+      sel: { Walk: 1, Swim: 1 },
       "🏃": "Walk",
       "⚓": "Swim",
       date: 0,
       seed,
-      maps: []
+      tech: {},
+      research: {}
     };
+    game2.poi = [];
+    for (let k in recipes) {
+      game2.tech[k] = recipes[k].cost == 0 ? 1 : 0;
+      game2.research[k] = 0;
+    }
     return game2;
   }
   function happiness() {
-    let h = game.store.food > 0 ? 0 : -10;
+    let h = game.store["🍎"] > 0 ? 0 : -game.pop;
     for (let k in game.store) {
       let v = game.store[k];
-      let b = (v / 100) ** 0.8;
+      let b = v ** 0.75;
       h += b;
     }
     return h;
   }
   function travelToP(p) {
     delete game.store[game.deposit];
+    if (game.home) {
+      let tc = travelCost(m, p, game.home);
+      advanceTimeByWeeks(tc.w);
+      delete tc.w;
+      for (let k in tc)
+        game.store[k] -= tc[k];
+    }
     game.home = p;
     game.deposit = p.kind;
     game.store[p.kind] = poiLeft(p);
+    centerMap();
   }
-  function populate(m2) {
+  function populate(pois) {
+    setMap(generateGameMap(game.date));
     console.time("populate");
-    let pois = [];
-    up: for (let j = 1e3; j--; ) {
-      let at = [~~(random() * m2.p.width), ~~(random() * m2.p.height)];
-      for (let op of pois) {
-        if (dist(op.at, at) < 10) {
-          continue up;
-        }
-      }
-      let p = generatePoi(m2, at);
-      pois.push(p);
+    let missing = scenario2.pois - pois.length;
+    for (let j = 0; j < missing * 4; j++) {
+      generatePoi(m, pois);
     }
+    compactPois(m, pois);
+    console.timeEnd("populate");
+  }
+  function compactPois(m2, pois) {
     let allTypes = new Set(pois.map((p) => p.kind));
     let fp = [];
     for (let type of allTypes) {
       let thisType = pois.filter((p) => p.kind == type);
       for (let i of [...thisType]) {
         for (let j of [...thisType]) {
+          if (game && (game.home == i || game.home == j))
+            continue;
           if (i != j && j.size && i.size && dist(i.at, j.at) < 40) {
             i.size += j.size;
+            i.age = (i.age + j.age) / 2;
+            i.ageByWeek = (i.ageByWeek + j.ageByWeek) / 2;
             j.size = 0;
           }
         }
       }
       fp.push(...thisType.filter((a) => a.size));
     }
-    console.timeEnd("populate");
-    return fp;
+    return pois.splice(0, 1e9, ...fp);
   }
   function recipeMax(r, goal) {
     let max = 1e12;
@@ -900,7 +955,7 @@
     }
     return { used, made };
   }
-  function setLocalRecipes() {
+  function setCurrentRecipes() {
     let rr = JSON.parse(JSON.stringify(recipes));
     for (let r of Object.values(rr)) {
       let special = Object.keys(scenario2.m).find((a) => r.from[a]);
@@ -916,18 +971,22 @@
           delete r.from[special];
         }
       }
+      for (let k in r.to) {
+        if (game.tech[r.name] > 0)
+          r.to[k] *= 1 + 0.1 * (game.tech[r.name] - 1);
+      }
     }
-    game.cr = rr;
+    currentRecipes = rr;
   }
   var travelTypes = ["⚓", "🏃"];
   function tryToUse(rname) {
     if (rname) {
-      let r = game.cr[rname];
+      let r = currentRecipes[rname];
       for (let travelType of travelTypes) {
         if (r.to[travelType]) {
           let tt = game[travelType];
-          game.sel.delete(tt);
-          game.sel.add(r.name);
+          delete game.sel[tt];
+          game.sel[r.name] = 1;
           game[travelType] = r.name;
           return;
         }
@@ -941,12 +1000,68 @@
       }
     }
   }
-  function advanceTimeByWeeks(weeks) {
+  function currentWeek() {
+    return ~~(game.date * scenario2.wpy);
+  }
+  function advanceTimeByWeeks(weeks = 1) {
+    let w = currentWeek();
     game.date += weeks / scenario2.wpy;
+    while (w < currentWeek()) {
+      w++;
+      processWeek();
+    }
     render();
+    window.save(0);
+  }
+  function processWeek() {
+    let eaten = game.pop * (1 + game.bonus["🥄"]) * 0.1;
+    game.store["🍎"] -= eaten;
+    if (game.store["🍎"] < 0) {
+      game.pop += game.store["🍎"] * 0.1;
+      game.store["🍎"] = 0;
+      report(`<red>🍎Food shortage!</red>`);
+    }
+    let spd = scenario2.popspd;
+    let dHappiness = clamp(-game.pop * spd, game.pop * spd, (happiness() - game.pop) * spd);
+    console.log({ dHappiness });
+    game.pop += dHappiness;
+    for (let k in game.store) {
+      let advancing = Object.values(currentRecipes).filter((r) => r.research[k]);
+      let by = game.store[k] ** 0.8 / advancing.length * scenario2.rspd;
+      for (let a of advancing) {
+        research(a.name, by);
+      }
+      if (k != game.deposit) {
+        game.store[k] *= 1 - scenario2.amrt;
+      }
+    }
+    for (let p of [...game.poi]) {
+      p.age += p.ageByWeek;
+      if ((p.age > 1 || poiLeft(p) <= 0) && game.home != p) {
+        game.poi.splice(game.poi.indexOf(p), 1);
+        let np;
+        do {
+          np = generatePoi(m, game.poi, game.date);
+        } while (!np);
+      }
+    }
+    populate(game.poi);
+  }
+  function research(name, v) {
+    game.research[name] += v;
+    let tc = tierCost(name);
+    if (game.research[name] > tc) {
+      game.tech[name]++;
+      game.research[name] = 0;
+      let t = game.tech[name];
+      report(t > 1 ? `${name} advanced to level ${t}` : `${name} researched`);
+    }
+  }
+  function tierCost(name) {
+    return scenario2.rcst[recipes[name].cost] * 2 ** game.tech[name];
   }
   function recipeUseable(rname) {
-    let r = game.cr[rname];
+    let r = currentRecipes[rname];
     return recipeMax(r) > 0;
   }
   function travelSteps(m2, a, b) {
@@ -1000,13 +1115,16 @@
 
   // src/prog.ts
   var m;
-  var mapList = [];
   var mapScroll = [0, 0];
   var mouseAt;
   var screenXY;
   var zoom = 1;
   var poiPointed;
   var game;
+  var log = [];
+  function report(t) {
+    log.push(t);
+  }
   var biomeNames = [
     "unknown",
     "desert",
@@ -1027,144 +1145,41 @@
     "lake",
     "ocean"
   ];
-  var parameters = [
-    ["seed", "number"],
-    ["noiseSeed", "number"],
-    ["width", "number"],
-    ["height", "number"],
-    [
-      "noiseSmoothness",
-      "range",
-      { max: 10, step: 0.5 }
-    ],
-    [
-      "tectonicSmoothness",
-      "range",
-      {
-        max: 10,
-        step: 0.5
-      }
-    ],
-    [
-      "noiseFactor",
-      "range",
-      {
-        min: -5,
-        max: 20,
-        step: 0.5
-      }
-    ],
-    [
-      "crustFactor",
-      "range",
-      {
-        min: -5,
-        max: 20,
-        step: 0.5
-      }
-    ],
-    [
-      "tectonicFactor",
-      "range",
-      {
-        min: -1,
-        max: 10,
-        step: 0.1
-      }
-    ],
-    [
-      "pangaea",
-      "range",
-      {
-        min: -5,
-        max: 5
-      }
-    ],
-    ["seaRatio", "range", { tip: "Sea percentage" }],
-    [
-      "flatness",
-      "range"
-    ],
-    ["randomiseHumidity", "checkbox"],
-    ["averageTemperature", "range", { min: -30, max: 50, step: 1 }],
-    ["elevationCold", "range", { min: 0, max: 300, step: 1 }],
-    [
-      "erosion",
-      "range",
-      { max: 1e5 }
-    ],
-    [
-      "riversShown",
-      "range",
-      {
-        max: 1e3
-      }
-    ],
-    ["biomeScrambling", "range"],
-    ["squareGrid", "checkbox"],
-    ["gameMapScale", "range", { min: 0, max: 4, step: 1 }],
-    [
-      "gameMapRivers",
-      "range",
-      {
-        max: 5e4,
-        step: 1e3
-      }
-    ],
-    ["discreteHeights", "range", { max: 40, step: 1 }]
-  ];
-  var defaultSettings = {
-    mapMode: 0,
-    seed: 1,
-    width: 640,
-    height: 640,
-    scale: 1,
-    noiseFactor: 10,
-    crustFactor: 6,
-    tectonicFactor: 3,
-    noiseSmoothness: 2,
-    tectonicSmoothness: 5,
-    pangaea: 0,
-    seaRatio: 0.55,
-    flatness: 0.5,
-    randomiseHumidity: 0,
-    averageTemperature: 15,
-    erosion: 5e4,
-    riversShown: 400,
-    biomeScrambling: 0,
-    terrainTypeColoring: 0,
-    discreteHeights: 0,
-    hillRatio: 0.12,
-    mountainRatio: 0.04,
-    gameMapRivers: 15e3,
-    gameMapScale: 2,
-    generatePhoto: 1,
-    squareGrid: 0,
-    noiseSeed: 0,
-    elevationCold: 0,
-    shading: true
+  var settings = {
+    "seed": 7,
+    "width": 700,
+    "height": 700,
+    "scale": 1,
+    "noiseFactor": 11.5,
+    "crustFactor": 5.5,
+    "tectonicFactor": 2.9,
+    "noiseSmoothness": 1,
+    "tectonicSmoothness": 8.5,
+    "pangaea": -1.5,
+    "seaRatio": 0.47,
+    "flatness": 0.09,
+    "randomiseHumidity": 0,
+    "averageTemperature": 19,
+    "erosion": 1e4,
+    "riversShown": 150,
+    "biomeScrambling": 0.24,
+    "terrainTypeColoring": 0,
+    "discreteHeights": 0,
+    "hillRatio": 0.12,
+    "mountainRatio": 0.04,
+    "gameMapRivers": 15e3,
+    "gameMapScale": 2,
+    "generatePhoto": 1,
+    "squareGrid": 0,
+    "generateTileMap": 0,
+    "noiseSeed": 1,
+    "elevationCold": 53,
+    "shading": 1
   };
-  var settings = {};
   function init() {
     parsePedia();
-    if (document.location.hash) {
-      settings = {};
-      let records = document.location.hash.substr(1).split("&").map((s) => s.split("="));
-      console.log(records);
-      for (let ss of records) {
-        settings[ss[0]] = ss[1] == "false" ? false : ss[1] == "true" ? true : Number(ss[1]);
-      }
-      console.log(settings);
-    }
-    if (!settings || !settings.width)
-      settings = JSON.parse(localStorage.mapGenSettings);
-    if (!settings || !settings.width)
-      settings = { ...defaultSettings };
-    rebuildForm();
-    applySettings();
     game = initGame(settings.seed);
-    m = generateGameMap(0, settings);
-    game.poi = populate(m);
+    populate(game.poi);
     renderMap();
     render();
   }
@@ -1172,67 +1187,39 @@
     tryToUse(e.target.dataset.rec);
     render();
   });
-  function applySettings() {
-    for (let [id, type] of parameters) {
-      if (type == "tip") continue;
-      let element = document.getElementById(id);
-      settings[id] = element.type == "checkbox" ? element.checked ? 1 : 0 : Number(element.value);
-      let id_value = document.getElementById(id + "_value");
-      if (id_value) id_value.innerText = String(settings[id]).substr(0, 8);
-    }
-    saveSettings();
-  }
   window.onload = init;
-  window["applySettings"] = applySettings;
-  document.body.addEventListener("mousedown", (e) => {
-    switch (e.target?.id) {
-      case "resetSettings":
-        settings = { ...defaultSettings };
-        rebuildForm();
-        applySettings();
-        return;
-    }
-  });
-  blendMaps.onchange = (e) => {
-    let n = Number(blendMaps.value);
-    if (mapList.length >= 2) {
-      m = blendFull(mapList[mapList.length - 2], mapList[mapList.length - 1], n);
-      renderMap();
-    }
-  };
-  var tips = {};
-  function rebuildForm() {
-    let form = document.getElementById("form");
-    form.innerHTML = "";
-    for (let param of parameters) {
-      let [id, type, also] = param;
-      also = also || {};
-      tips[id] = also.tip;
-      switch (type) {
-        case "tip":
-          form.innerHTML += `<div class="tip">${id}</div>`;
-          break;
-        case "checkbox":
-          form.innerHTML += `<div>${id}</div><input class="checkbox" type="checkbox" id="${id}" ${settings[id] ? "checked" : ""} />`;
-          break;
-        case "number":
-          form.innerHTML += `<div>${id}</div><input class="number" type="number" id="${id}" value="${settings[id]}" />`;
-          break;
-        case "range":
-          let min = also.min || 0;
-          let max = also.max || 1;
-          let step = also.step || (max - min) / 100;
-          form.innerHTML += `<div>${id}</div><input class="range" type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${settings[id]}"/>
-        <div id="${id}_value"></div>
-        `;
-          break;
+  Object.assign(window, {
+    give: (a) => {
+      game.store[a] += 100;
+      render();
+    },
+    foc: (a) => {
+      if (game.focus != a) {
+        game.focus = a;
+        advanceTimeByWeeks();
+      }
+    },
+    save: (n) => {
+      if (n != 0) {
+        if (!confirm(`Save to ${n}?`))
+          return;
+      }
+      let s = JSON.stringify({ ...game, home: game.poi.indexOf(game.home) }, null, 2);
+      localStorage.setItem("temo" + n, s);
+      report("Saved");
+    },
+    load: (n) => {
+      let data = localStorage.getItem("temo" + n);
+      if (data) {
+        game = JSON.parse(data);
+        game.home = game.poi[game.home];
+        setMap(generateGameMap(game.date));
+        centerMap();
+        report("Loaded");
       }
     }
-  }
-  function saveSettings() {
-    document.location.hash = Object.keys(settings).map((k) => `${k}=${settings[k]}`).join("&");
-    localStorage.mapGenSettings = JSON.stringify(settings);
-  }
+  });
+  var tips = {};
   var mainCanvas;
   function showMap(data, title, fun, scale = 1 / 4, altitude) {
     mainCanvas = data2image(data, settings.width, fun, altitude);
@@ -1321,21 +1308,29 @@ ${!game.home || p == game.home ? "" : `<br/>${recipeToText(ts)}<br/>${recipeToTe
     return parseFloat(Number(n).toFixed(2));
   }
   function recipeToText(r) {
-    return r ? Object.keys(r).map((k) => `${fix(r[k])}${k}`).join(" ") : "";
+    return r ? Object.keys(r).map((k) => `<num data-red='${game.store[k] < 0.1}'>${fix(r[k])}</num>${k}`).join(" ") : "";
+  }
+  function centerMap() {
+    let half = settings.width / 2;
+    if (game.home) {
+      mapScroll[0] = (-game.home.at[0] * 2 ** zoom + half) * devicePixelRatio;
+      mapScroll[1] = (-game.home.at[1] * 2 ** zoom + half) * devicePixelRatio;
+    }
   }
   function render() {
     if (!game)
       return;
+    setCurrentRecipes();
     mainCanvas.style.transform = `translate(${mapScroll[0]}px, ${mapScroll[1]}px) scale(${2 ** zoom})`;
     let s = "";
-    for (let i in game.poi) {
-      s += poiText(i);
+    for (let i2 in game.poi) {
+      s += poiText(i2);
     }
     ps.innerHTML = s;
     let half = settings.width / 2;
-    for (let i in game.poi) {
-      let p = game.poi[i];
-      let d = document.querySelector(`#poi${i}`);
+    for (let i2 in game.poi) {
+      let p = game.poi[i2];
+      let d = document.querySelector(`#poi${i2}`);
       if (d) {
         let size = (p.size ** 0.5 * 3 + 4) * 2 ** zoom;
         d.style.left = `${p.at[0] * devicePixelRatio * 2 ** zoom + mapScroll[0] - size / 2}px`;
@@ -1349,53 +1344,70 @@ ${!game.home || p == game.home ? "" : `<br/>${recipeToText(ts)}<br/>${recipeToTe
           poiPointed = void 0;
         };
         d.onmousedown = () => {
+          if (game.home) {
+            let tc = travelCost(m, p, game.home);
+            if (tc.fail) {
+              report("Unreachable");
+              return;
+            }
+          }
           travelToP(p);
           render();
-          mapScroll[0] = (-p.at[0] * 2 ** zoom + half) * devicePixelRatio;
-          mapScroll[1] = (-p.at[1] * 2 ** zoom + half) * devicePixelRatio;
         };
       }
     }
-    setLocalRecipes();
+    setCurrentRecipes();
     game.bonus["💗"] = happiness();
-    let barCont = {
+    let barCont = [{
       "👨‍👩‍👦‍👦": game.pop,
       "🏋": travelWeight(),
-      "📅": fix(game.date * scenario2.wpy),
-      ...game.bonus,
+      "📅": currentWeek(),
+      ...game.bonus
+    }, {
       ...game.store
-    };
-    recdiv.innerHTML = "<div id=res>" + Object.keys(barCont).map((k) => [k, ~~barCont[k]]).map(
-      (a) => `<span onmousedown="give('${a[0]}')">${a.join("<br/>")}</span>`
-    ).join("") + "</div>" + Object.values(game.cr).map((r) => {
+    }];
+    let i, svs = "";
+    for (i = 1; localStorage.getItem("temo" + i); i++) {
+      svs += `<button onmousedown=save(${i})>Save ${i}</button><button onmousedown=load(${i})>Load ${i}</button>`;
+    }
+    svs += `<button onmousedown=save(${i})>Save ${i}</button>`;
+    recdiv.innerHTML = barCont.map((bc) => "<div class=res>" + Object.keys(bc).map((k) => [k, ~~bc[k]]).map(
+      (a) => `<div onmousedown="give('${a[0]}')">${a.join("<br/>")}</div>`
+    ).join("") + "</div>").join("") + Object.values(currentRecipes).map((r) => {
       let to = recipeToText(r.to);
       let rg = recipeGroupStartingWith[r.name];
-      let known = r.cost == 0;
-      return (rg ? `<div>${rg}</div>` : "") + `<button data-sel=${game.sel.has(r.name)} data-rec="${r.name}" data-use="${known && recipeUseable(r.name)}" >
-<div class=rb>⚗️</div> 
+      let known = game.tech[r.name] > 0;
+      return (rg ? `<div>${rg}</div>` : "") + `<button data-sel=${game.sel[r.name]} data-rec="${r.name}" data-use="${known && recipeUseable(r.name)}" >
+${game.bonus[`⚗️`] ? `<div class=foc data-foc="${game.focus == r.name}" onmousedown=foc('${r.name}')>⚗️</div>` : ""}
 ${!known ? `<div class=un>UNKNOWN</div>` : ""}
-${`<div class=r><div>${r.name}</div><div>${r.cost}⚗️↩${Object.keys(r.bonus)}</div></div>
+${`<div class=r><div>${r.name} ${game.tech[r.name] || ""}</div>
+<div>${~~(tierCost(r.name) - game.research[r.name])}<span class=resl>⚗️↩${Object.keys(r.research).join("")}</span></div></div>
 <span class=rec>${recipeToText(r.from)}${to ? "🡢 " + to : ""}</span>`}
 </button>`;
-    }).join("");
+    }).join("") + "<p class=log>" + log.slice(log.length - 20).join(" ✦ ") + "</p>" + svs + `<button data-fls=${game?.date == 0 && hasAuto} onmousedown=load(0)>Load autosave</button>`;
   }
-  window["give"] = (a) => {
-    game.store[a] += 100;
-    render();
-  };
-  function generateGameMap(date) {
+  var hasAuto = !!localStorage.getItem("temo0");
+  function setMap(nm) {
+    m = nm;
+    renderMap();
+    return m;
+  }
+  function generateGameMap(date = game.date) {
     let before = ~~date;
     if (before != date)
-      date = before + ~~(date % 1 * 13) / 13;
-    if (game.maps[date])
-      return game.maps[date];
+      date = before + ~~(date % 1 * scenario2.blnd) / scenario2.blnd;
+    if (mapsCache[date])
+      return mapsCache[date];
     if (before == date) {
-      game.maps[date] = generateMap({ ...settings, seed: game.seed + date });
-      return game.maps[date];
+      mapsCache[date] = generateMap({ ...settings, seed: game.seed + date });
+      return mapsCache[date];
     }
-    let [a, b] = [generateGameMap(before, settings), generateGameMap(before + 1, settings)];
+    console.time("blend");
+    let [a, b] = [generateGameMap(before), generateGameMap(before + 1)];
     let blend = blendFull(a, b, date - before);
-    console.timeEnd("generation total");
+    report("map updated");
+    mapsCache[date] = blend;
+    console.timeEnd("blend");
     return blend;
   }
 })();
