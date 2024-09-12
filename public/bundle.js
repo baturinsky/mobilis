@@ -535,6 +535,12 @@
   // src/scenario.ts
   var categories = {};
   var scenario2 = {
+    /**age by week */
+    abw: 0.01,
+    /**research per book */
+    rpb: 0.1,
+    /**research per book for focused*/
+    rpbf: 1,
     popspd: 0.01,
     /**POI deposit sizes */
     psz: 1e3,
@@ -662,12 +668,12 @@
 1Tame Cats:.03🥄-.2🗑️.05💕0🐅
 1Pottery:-.2🗑️0🍎
 2Conservation:-.3🗑️0🍎
-0Cooking:-.1🗑️-.1🥄1🍲0🍎
-1Mapmaking:.25🔭0🏃
-2Astronomy:.25🔭0🏃
-3Compass:.25🔭0🏃
-4Optics:.25🔭0🏃
-1Research Focus:1⚗️0📙`,
+1Cooking:-.1🗑️-.1🥄.5🍲0🍎
+1Mapmaking:.2🔭0🏃
+2Astronomy:.2🔭0🏃
+3Compass:.2🔭0🏃
+4Optics:.2🔭0🏃
+1Science:1⚗️0📙`,
     /**animals per temperature and humidity */
     atc: "🐏,🐂,🐂,🐎,🐪,🐏,🐺,🐗,🐗,🐅",
     /**multipliers*/
@@ -736,7 +742,7 @@
   var mapsCache = [];
   var currentRecipes;
   function poiLeft(p) {
-    return ~~(p.size * scenario2.psz * Math.sin(clamp(0, 1, p.age) * 3.14) - p.taken);
+    return Math.max(0, ~~(p.size * scenario2.psz * Math.sin(clamp(0, 1, p.age) * 3.14) - p.taken));
   }
   function generatePoi(m2, pois, date) {
     let at = [~~(random() * m2.p.width), ~~(random() * m2.p.height)];
@@ -747,7 +753,7 @@
     }
     let i = coord2ind(at);
     let biome = m2.biome[i];
-    let kind;
+    let kind, isCal = false;
     let size = 1 + random();
     if (biome == LAKE || biome == OCEAN) {
       kind = "🐠";
@@ -756,22 +762,30 @@
       else
         kind = "🐋";
     } else {
-      let r = m2.noise[i + 1e3] % 0.1;
-      if (r < 0.01) {
-        kind = "🏔️";
-      } else if (r < 0.02) {
-        kind = r % 0.01 < 5e-3 ? "⬛" : "🛢️";
+      let cr = m2.noise[i + 500] % 0.1;
+      let maxSpawn = game.date % 1 >= 12 / 13 || game.date % 13 >= 12;
+      if (cr < (maxSpawn ? 0.01 : 1e-3) * game.date) {
+        let cals = Object.keys(categories["CAL"]);
+        kind = cals[~~(random() * cals.length)];
+        isCal = true;
       } else {
-        let t = m2.temperature[i] * 0.8 + m2.noise[i] * 5 + 12;
-        let h = m2.humidity[i] * 10 + m2.noise[i] * 5 - 5;
-        if (r < 0.06) {
-          kind = scenario2.atc.split(",")[(h > 0 ? 5 : 0) + ~~clamp(0, 4, t / 10)];
+        let r = m2.noise[i + 1e3] % 0.1;
+        if (r < 0.01) {
+          kind = "🏔️";
+        } else if (r < 0.02) {
+          kind = r % 0.01 < 5e-3 ? "⬛" : "🛢️";
         } else {
-          kind = h < -0.5 ? r % 0.01 < 3e-3 && t > 0 ? "💧" : "🗿" : h < 0.2 ? "🌿" : "🌲,🌲,🌳,🌳,🌴".split(",")[~~clamp(0, 4, t / 15)];
+          let t = m2.temperature[i] * 0.8 + m2.noise[i] * 5 + 12;
+          let h = m2.humidity[i] * 10 + m2.noise[i] * 5 - 5;
+          if (r < 0.06) {
+            kind = scenario2.atc.split(",")[(h > 0 ? 5 : 0) + ~~clamp(0, 4, t / 10)];
+          } else {
+            kind = h < -0.5 ? r % 0.01 < 3e-3 && t > 0 ? "💧" : "🗿" : h < 0.2 ? "🌿" : "🌲,🌲,🌳,🌳,🌴".split(",")[~~clamp(0, 4, t / 15)];
+          }
         }
       }
     }
-    let p = { at, kind, size, taken: 0, age: random(), temp: m2.temperature[i], ageByWeek: 0.01 };
+    let p = { at, kind, size, taken: 0, age: random(), temp: m2.temperature[i], ageByWeek: (random() + 0.5) * scenario2.abw * (isCal ? 10 : 1) };
     pois.push(p);
     return p;
   }
@@ -853,6 +867,7 @@
       research: {}
     };
     game2.poi = [];
+    game2.date = 0.99;
     for (let k in recipes) {
       game2.tech[k] = recipes[k].cost == 0 ? 1 : 0;
       game2.research[k] = 0;
@@ -860,13 +875,20 @@
     return game2;
   }
   function happiness() {
-    let h = game.store["🍎"] > 0 ? 0 : -game.pop;
+    let food = game.store["🍎"];
+    let h = food > 0 ? 0 : -game.pop;
     for (let k in game.store) {
       let v = game.store[k];
       let b = v ** 0.75;
+      if (k == "🍎")
+        b = withBonus(h, "🍲");
       h += b;
     }
+    h = withBonus(h, "💕");
     return h;
+  }
+  function withBonus(n, k) {
+    return smartMult(game.bonus[k]) * n;
   }
   function travelToP(p) {
     delete game.store[game.deposit];
@@ -925,6 +947,7 @@
     return max;
   }
   function recipeUse({ used, made }) {
+    report(recipeToText(used) + "🡢" + recipeToText(made));
     for (let k in used) {
       game.store[k] -= used[k];
       if (game.deposit == k && game.home) {
@@ -962,9 +985,13 @@
       if (special && game.home) {
         let m2 = mult[special][game.home.kind];
         if (m2) {
+          let mm = 1;
+          if (special == "🐾") {
+            mm = withBonus(1, "🎯");
+          }
           for (let k in r.to) {
             if (m2[k]) {
-              r.to[k] = r.to[k] * m2[k];
+              r.to[k] = r.to[k] * m2[k] * mm;
             }
           }
           r.from[game.home.kind] = r.from[special];
@@ -972,8 +999,10 @@
         }
       }
       for (let k in r.to) {
+        let m2 = 1;
         if (game.tech[r.name] > 0)
-          r.to[k] *= 1 + 0.1 * (game.tech[r.name] - 1);
+          m2 *= 1 + 0.1 * (game.tech[r.name] - 1);
+        r.to[k] *= m2;
       }
     }
     currentRecipes = rr;
@@ -982,6 +1011,9 @@
   function tryToUse(rname) {
     if (rname) {
       let r = currentRecipes[rname];
+      if (!r.to) {
+        return;
+      }
       for (let travelType of travelTypes) {
         if (r.to[travelType]) {
           let tt = game[travelType];
@@ -1011,15 +1043,16 @@
       processWeek();
     }
     render();
-    window.save(0);
+    window["save"](0);
   }
   function processWeek() {
     let eaten = game.pop * (1 + game.bonus["🥄"]) * 0.1;
     game.store["🍎"] -= eaten;
     if (game.store["🍎"] < 0) {
-      game.pop += game.store["🍎"] * 0.1;
+      let d = game.store["🍎"] * 0.1;
+      game.pop += d;
       game.store["🍎"] = 0;
-      report(`<red>🍎Food shortage!</red>`);
+      report(`<red>🍎hungry! ${fix(d)}👨‍👩‍👦‍👦</red>`);
     }
     let spd = scenario2.popspd;
     let dHappiness = clamp(-game.pop * spd, game.pop * spd, (happiness() - game.pop) * spd);
@@ -1035,6 +1068,14 @@
         game.store[k] *= 1 - scenario2.amrt;
       }
     }
+    let bonus = game.bonus["⚗️"];
+    let books = game.store["📙"] ** 0.9 * Math.max(1, bonus);
+    for (let rn in recipes) {
+      research(rn, books * scenario2.rpb);
+    }
+    if (game.focus) {
+      research(game.focus, books * scenario2.rpbf * bonus);
+    }
     for (let p of [...game.poi]) {
       p.age += p.ageByWeek;
       if ((p.age > 1 || poiLeft(p) <= 0) && game.home != p) {
@@ -1045,7 +1086,20 @@
         } while (!np);
       }
     }
+    updateBonuses();
     populate(game.poi);
+  }
+  function updateBonuses() {
+    for (let n in game.bonus) {
+      game.bonus[n] = 0;
+    }
+    for (let r of Object.values(recipes)) {
+      if (!r.to && game.tech[r.name] > 0) {
+        for (let k in r.from) {
+          game.bonus[k] += r.from[k] * (0.9 + 0.1 * game.tech[r.name]);
+        }
+      }
+    }
   }
   function research(name, v) {
     game.research[name] += v;
@@ -1111,6 +1165,17 @@
     } else {
       return { fail: 2 };
     }
+  }
+  function smartMult(n) {
+    return n > 0 ? 1 + n : 1 / (1 - n);
+  }
+  console.log("SM", smartMult(0.5));
+  function recipeToText(r, vertical) {
+    if (r?.fail) {
+      return "too<br/>far";
+    }
+    let txt = r ? Object.keys(r).map((k) => `<num data-red='${game.store[k] < 0.1}'>${fix(r[k])}</num>${k}`).join(vertical ? "<br/>" : " ") : "";
+    return txt;
   }
 
   // src/prog.ts
@@ -1179,6 +1244,7 @@
   function init() {
     parsePedia();
     game = initGame(settings.seed);
+    updateBonuses();
     populate(game.poi);
     renderMap();
     render();
@@ -1206,7 +1272,8 @@
       }
       let s = JSON.stringify({ ...game, home: game.poi.indexOf(game.home) }, null, 2);
       localStorage.setItem("temo" + n, s);
-      report("Saved");
+      if (n != 0)
+        report("Saved");
     },
     load: (n) => {
       let data = localStorage.getItem("temo" + n);
@@ -1290,8 +1357,9 @@
     let ts = travelSteps(m, p, game.home);
     let tc = travelCost(m, p, game.home);
     return `<div class=poi id=poi${i}>
-${p.kind}<center style=color:rgb(${15 * p.temp - 400},50,${-20 * p.temp + 100})>${~~poiLeft(p)}
-${!game.home || p == game.home ? "" : `<br/>${recipeToText(ts)}<br/>${recipeToText(tc)}`}</center>
+<div class=pmain>${p.kind}<center style=color:rgb(${15 * p.temp - 400},50,${-20 * p.temp + 100})>${~~poiLeft(p)}
+</center></div>
+<center style=margin:0.2rem >${!game.home || p == game.home ? "" : recipeToText(tc, true)}<center>
 </div>`;
   }
   function renderMap() {
@@ -1307,12 +1375,10 @@ ${!game.home || p == game.home ? "" : `<br/>${recipeToText(ts)}<br/>${recipeToTe
   function fix(n) {
     return parseFloat(Number(n).toFixed(2));
   }
-  function recipeToText(r) {
-    return r ? Object.keys(r).map((k) => `<num data-red='${game.store[k] < 0.1}'>${fix(r[k])}</num>${k}`).join(" ") : "";
-  }
   function centerMap() {
     let half = settings.width / 2;
     if (game.home) {
+      zoom = 2.25 / (1 + game.bonus["🔭"]);
       mapScroll[0] = (-game.home.at[0] * 2 ** zoom + half) * devicePixelRatio;
       mapScroll[1] = (-game.home.at[1] * 2 ** zoom + half) * devicePixelRatio;
     }
@@ -1371,7 +1437,7 @@ ${!game.home || p == game.home ? "" : `<br/>${recipeToText(ts)}<br/>${recipeToTe
       svs += `<button onmousedown=save(${i})>Save ${i}</button><button onmousedown=load(${i})>Load ${i}</button>`;
     }
     svs += `<button onmousedown=save(${i})>Save ${i}</button>`;
-    recdiv.innerHTML = barCont.map((bc) => "<div class=res>" + Object.keys(bc).map((k) => [k, ~~bc[k]]).map(
+    recdiv.innerHTML = barCont.map((bc) => "<div class=res>" + Object.keys(bc).map((k) => [k, bc[k] > 10 ? ~~bc[k] : fix(bc[k])]).map(
       (a) => `<div onmousedown="give('${a[0]}')">${a.join("<br/>")}</div>`
     ).join("") + "</div>").join("") + Object.values(currentRecipes).map((r) => {
       let to = recipeToText(r.to);
@@ -1384,7 +1450,7 @@ ${`<div class=r><div>${r.name} ${game.tech[r.name] || ""}</div>
 <div>${~~(tierCost(r.name) - game.research[r.name])}<span class=resl>⚗️↩${Object.keys(r.research).join("")}</span></div></div>
 <span class=rec>${recipeToText(r.from)}${to ? "🡢 " + to : ""}</span>`}
 </button>`;
-    }).join("") + "<p class=log>" + log.slice(log.length - 20).join(" ✦ ") + "</p>" + svs + `<button data-fls=${game?.date == 0 && hasAuto} onmousedown=load(0)>Load autosave</button>`;
+    }).join("") + "<br/>" + svs + `<button data-fls=${game?.date == 0 && hasAuto} onmousedown=load(0)>Load autosave</button><p class=log>` + log.slice(log.length - 40).join(" ✦ ") + "</p>";
   }
   var hasAuto = !!localStorage.getItem("temo0");
   function setMap(nm) {

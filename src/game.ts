@@ -1,4 +1,4 @@
-import { centerMap, game, generateGameMap, m, render, report, setMap, settings } from "./prog";
+import { centerMap, fix, game, generateGameMap, m, render, report, setMap, settings } from "./prog";
 import { categories, LAKE, OCEAN, scenario } from "./scenario";
 import { clamp, coord2ind, dist, LayeredMap, lerp, lerpXY, random, XY } from "./worldgen";
 
@@ -49,7 +49,7 @@ export let currentRecipes: { [id: string]: Recipe }
 
 
 export function poiLeft(p: Poi) {
-    return ~~(p.size * scenario.psz * Math.sin(clamp(0, 1, p.age) * 3.14) - p.taken);
+    return Math.max(0, ~~(p.size * scenario.psz * Math.sin(clamp(0, 1, p.age) * 3.14) - p.taken));
 }
 
 function generatePoi(m: LayeredMap, pois: Poi[], date?: number) {
@@ -62,7 +62,8 @@ function generatePoi(m: LayeredMap, pois: Poi[], date?: number) {
 
     let i = coord2ind(at);
     let biome = m.biome[i]
-    let kind: string;
+    let kind: string, isCal = false;
+
     let size = 1 + random();
     if (biome == LAKE || biome == OCEAN) {
         kind = "🐠"
@@ -71,22 +72,30 @@ function generatePoi(m: LayeredMap, pois: Poi[], date?: number) {
         else
             kind = "🐋"
     } else {
-        let r = m.noise[i + 1000] % 0.1;
-        if (r < 0.01) {
-            kind = "🏔️";
-        } else if (r < 0.02) {
-            kind = r % 0.01 < 0.005 ? "⬛" : "🛢️";
+        let cr = m.noise[i + 500] % 0.1;
+        let maxSpawn = (game.date%1 >= 12/13) || (game.date%13>=12)
+        if (cr < (maxSpawn?0.01:0.001)*game.date) {
+            let cals = Object.keys(categories["CAL"]);
+            kind = cals[~~(random()*cals.length)];
+            isCal = true;
         } else {
-            let t = m.temperature[i] * 0.8 + m.noise[i] * 5 + 12;
-            let h = m.humidity[i] * 10 + m.noise[i] * 5 - 5;
-            if (r < 0.06) {
-                kind = scenario.atc.split(",")[(h > 0 ? 5 : 0) + ~~clamp(0, 4, t / 10)];
+            let r = m.noise[i + 1000] % 0.1;
+            if (r < 0.01) {
+                kind = "🏔️";
+            } else if (r < 0.02) {
+                kind = r % 0.01 < 0.005 ? "⬛" : "🛢️";
             } else {
-                kind = h < -0.5 ? (r % 0.01 < 0.003 && t > 0 ? "💧" : "🗿") : h < 0.2 ? "🌿" : "🌲,🌲,🌳,🌳,🌴".split(",")[~~clamp(0, 4, t / 15)]
+                let t = m.temperature[i] * 0.8 + m.noise[i] * 5 + 12;
+                let h = m.humidity[i] * 10 + m.noise[i] * 5 - 5;
+                if (r < 0.06) {
+                    kind = scenario.atc.split(",")[(h > 0 ? 5 : 0) + ~~clamp(0, 4, t / 10)];
+                } else {
+                    kind = h < -0.5 ? (r % 0.01 < 0.003 && t > 0 ? "💧" : "🗿") : h < 0.2 ? "🌿" : "🌲,🌲,🌳,🌳,🌴".split(",")[~~clamp(0, 4, t / 15)]
+                }
             }
         }
     }
-    let p: Poi = { at, kind, size, taken: 0, age: random(), temp: m.temperature[i], ageByWeek: 0.01 };
+    let p: Poi = { at, kind, size, taken: 0, age: random(), temp: m.temperature[i], ageByWeek: (random() + 0.5) * scenario.abw * (isCal?10:1) };
     pois.push(p)
     return p
 }
@@ -120,15 +129,15 @@ function parseRecipes(s: string, short = false) {
         if (!etc)
             debugger
 
-        
-        let [from, to, tech] = etc.map(strToObj).map((a,i) => {
-            let addToRes = etc.length<=2 || i==2;
+
+        let [from, to, tech] = etc.map(strToObj).map((a, i) => {
+            let addToRes = etc.length <= 2 || i == 2;
             for (let k in a) {
-                if (!categories.BNS[k] && addToRes){
-                    if(scenario.aka[k]){
+                if (!categories.BNS[k] && addToRes) {
+                    if (scenario.aka[k]) {
                         research[scenario.aka[k]] = 1;
-                    } else if(scenario.m[k]){
-                        for(let o in mult[k]){
+                    } else if (scenario.m[k]) {
+                        for (let o in mult[k]) {
                             research[o] = 1;
                         }
                     } else {
@@ -140,7 +149,7 @@ function parseRecipes(s: string, short = false) {
             }
             return a
         }).filter(v => v)
-        
+
         return short ? [name, from] : [name, { from, to, t: v, name, cost, research } as Recipe]
     }).filter(v => v)) as { [id: string]: Recipe }
 }
@@ -185,6 +194,7 @@ export function initGame(seed: number) {
         research: {}
     } as any as Game;
     game.poi = []
+    game.date = 0.99;
     //game.bonus['⚗️'] = 1;
 
     for (let k in recipes) {
@@ -196,13 +206,21 @@ export function initGame(seed: number) {
 }
 
 export function happiness() {
-    let h = game.store['🍎'] > 0 ? 0 : -game.pop
+    let food = game.store['🍎'];
+    let h = food > 0 ? 0 : -game.pop
     for (let k in game.store) {
         let v = game.store[k]
         let b = v ** 0.75
+        if (k == '🍎')
+            b = withBonus(h, '🍲')
         h += b
     }
+    h = withBonus(h, '💕')
     return h;
+}
+
+function withBonus(n: number, k: string) {
+    return smartMult(game.bonus[k]) * n;
 }
 
 
@@ -273,6 +291,7 @@ function recipeMax(r: Recipe, goal?: number) {
 
 /**Apply recipe uage result */
 function recipeUse({ used, made }) {
+    report(recipeToText(used) + "🡢" + recipeToText(made))
     for (let k in used) {
         game.store[k] -= used[k];
         if (game.deposit == k && game.home) {
@@ -314,9 +333,15 @@ export function setCurrentRecipes() {
         if (special && game.home) {
             let m = mult[special][game.home.kind];
             if (m) {
+                let mm = 1
+                if (special == '🐾') {
+                    mm = withBonus(1, '🎯');
+                }
+
+
                 for (let k in r.to) {
                     if (m[k]) {
-                        r.to[k] = r.to[k] * m[k];
+                        r.to[k] = r.to[k] * m[k] * mm;
                     }
                 }
                 r.from[game.home.kind] = r.from[special];
@@ -324,8 +349,10 @@ export function setCurrentRecipes() {
             }
         }
         for (let k in r.to) {
+            let m = 1;
             if (game.tech[r.name] > 0)
-                r.to[k] *= 1 + 0.1 * (game.tech[r.name] - 1)
+                m *= 1 + 0.1 * (game.tech[r.name] - 1)
+            r.to[k] *= m;
         }
     }
 
@@ -337,6 +364,11 @@ const travelTypes = ["⚓", "🏃"];
 export function tryToUse(rname?: string) {
     if (rname) {
         let r = currentRecipes[rname];
+        if (!r.to) {
+            //game.sel[rname] = game.sel[rname]?undefined:1;
+            return
+        }
+
 
         for (let travelType of travelTypes) {
             if (r.to[travelType]) {
@@ -370,16 +402,17 @@ export function advanceTimeByWeeks(weeks = 1) {
         processWeek();
     }
     render()
-    window.save(0)
+    window["save"](0)
 }
 
 function processWeek() {
     let eaten = game.pop * (1 + game.bonus['🥄']) * 0.1;
     game.store['🍎'] -= eaten;
     if (game.store['🍎'] < 0) {
-        game.pop += game.store['🍎'] * 0.1;
+        let d = game.store['🍎'] * 0.1
+        game.pop += d;
         game.store['🍎'] = 0;
-        report(`<red>🍎Food shortage!</red>`)
+        report(`<red>🍎hungry! ${fix(d)}👨‍👩‍👦‍👦</red>`)
     }
 
     let spd = scenario.popspd;
@@ -398,6 +431,16 @@ function processWeek() {
         }
     }
 
+    let bonus = game.bonus['⚗️'];
+    let books = game.store['📙'] ** 0.9 * Math.max(1, bonus);
+
+    for (let rn in recipes) {
+        research(rn, books * scenario.rpb)
+    }
+
+    if (game.focus) {
+        research(game.focus, books * scenario.rpbf * bonus)
+    }
 
     for (let p of [...game.poi]) {
         p.age += p.ageByWeek;
@@ -410,7 +453,22 @@ function processWeek() {
         }
     }
 
+    updateBonuses();
+
     populate(game.poi)
+}
+
+export function updateBonuses() {
+    for (let n in game.bonus) {
+        game.bonus[n] = 0;
+    }
+    for (let r of Object.values(recipes)) {
+        if (!r.to && game.tech[r.name] > 0) {
+            for (let k in r.from) {
+                game.bonus[k] += r.from[k] * (0.9 + 0.1 * game.tech[r.name])
+            }
+        }
+    }
 }
 
 function research(name: string, v: number) {
@@ -490,4 +548,19 @@ export function travelCost(m: LayeredMap, a: Poi, b?: Poi) {
     } else {
         return { fail: 2 };
     }
-} 
+}
+
+function smartMult(n: number) {
+    return n > 0 ? 1 + n : 1 / (1 - n)
+}
+
+console.log("SM", smartMult(0.5));
+
+export function recipeToText(r, vertical?) {
+    if (r?.fail) {
+        return "too<br/>far"
+    }
+    let txt = r ? Object.keys(r).map(k => `<num data-red='${game.store[k] < 0.1}'>${fix(r[k])}</num>${k}`).join(vertical ? "<br/>" : " ") : ""
+    return txt;
+}
+

@@ -1,6 +1,6 @@
 "use strict";
 
-import { initGame, mult, Poi, poiLeft, Recipe, recipes, Game, parsePedia, populate, travelToP, setCurrentRecipes, tryToUse, travelSteps, travelCost, travelWeight, recipeUseable, happiness, recipeGroupStartingWith, advanceTimeByWeeks, currentWeek, currentRecipes, tierCost, mapsCache } from "./game";
+import { initGame, mult, Poi, poiLeft, Recipe, recipes, Game, parsePedia, populate, travelToP, setCurrentRecipes, tryToUse, travelSteps, travelCost, travelWeight, recipeUseable, happiness, recipeGroupStartingWith, advanceTimeByWeeks, currentWeek, currentRecipes, tierCost, mapsCache, recipeToText, updateBonuses } from "./game";
 import { categories, scenario } from "./scenario";
 import {
   data2image, rescaleImage, generateMap, ShowMapF, LayeredMap, RGBA,
@@ -86,6 +86,7 @@ function init() {
   parsePedia()
 
   game = initGame(settings.seed);
+  updateBonuses();
   populate(game.poi)
   renderMap();
   render();
@@ -117,7 +118,8 @@ Object.assign(window, {
         return;
     let s = JSON.stringify({ ...game, home: game.poi.indexOf(game.home as any) }, null, 2)
     localStorage.setItem("temo" + n, s)
-    report("Saved")
+    if (n != 0)
+      report("Saved")
   },
   load: n => {
     let data = localStorage.getItem("temo" + n);
@@ -256,8 +258,9 @@ function poiText(i: number) {
   let ts = travelSteps(m, p, game.home)
   let tc = travelCost(m, p, game.home)
   return `<div class=poi id=poi${i}>
-${p.kind}<center style=color:rgb(${15 * p.temp - 400},50,${-20 * p.temp + 100})>${~~poiLeft(p)}
-${!game.home || p == game.home ? "" : `<br/>${recipeToText(ts)}<br/>${recipeToText(tc)}`}</center>
+<div class=pmain>${p.kind}<center style=color:rgb(${15 * p.temp - 400},50,${-20 * p.temp + 100})>${~~poiLeft(p)}
+</center></div>
+<center style=margin:0.2rem >${!game.home || p == game.home ? "" : recipeToText(tc, true)}<center>
 </div>`
 }
 
@@ -281,13 +284,10 @@ export function fix(n) {
   return parseFloat(Number(n).toFixed(2))
 }
 
-function recipeToText(r) {
-  return r ? Object.keys(r).map(k => `<num data-red='${game.store[k] < 0.1}'>${fix(r[k])}</num>${k}`).join(" ") : ""
-}
-
 export function centerMap(){
   let half = settings.width / 2;
   if (game.home) {
+    zoom = 2.25 / (1 + game.bonus['🔭']);
     mapScroll[0] = (- game.home.at[0] * 2 ** zoom + half) * devicePixelRatio
     mapScroll[1] = (- game.home.at[1] * 2 ** zoom + half) * devicePixelRatio
   }
@@ -354,7 +354,7 @@ export function render() {
   svs += `<button onmousedown=save(${i})>Save ${i}</button>`
 
   recdiv.innerHTML =
-    barCont.map(bc => "<div class=res>" + Object.keys(bc).map(k => ([k, ~~bc[k]])).map(a =>
+    barCont.map(bc => "<div class=res>" + Object.keys(bc).map(k => ([k, bc[k]>10?~~bc[k]:fix(bc[k])])).map(a =>
       `<div onmousedown="give('${a[0]}')">${a.join("<br/>")}</div>`
     ).join("") + "</div>").join("") +
     Object.values(currentRecipes).map(r => {
@@ -369,8 +369,8 @@ ${`<div class=r><div>${r.name} ${game.tech[r.name] || ''}</div>
 <div>${~~(tierCost(r.name) - game.research[r.name])}<span class=resl>⚗️↩${Object.keys(r.research).join('')}</span></div></div>
 <span class=rec>${recipeToText(r.from)}${to ? '🡢 ' + to : ''}</span>`}
 </button>`}).join("")
-    + "<p class=log>" + log.slice(log.length - 20).join(" ✦ ") + "</p>"
-    + svs + `<button data-fls=${game?.date == 0 && hasAuto} onmousedown=load(0)>Load autosave</button>`
+    + "<br/>" + svs + `<button data-fls=${game?.date == 0 && hasAuto} onmousedown=load(0)>Load autosave</button>`
+    + "<p class=log>" + log.slice(log.length - 40).join(" ✦ ") + "</p>"
     ;
 }
 

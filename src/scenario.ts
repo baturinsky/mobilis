@@ -3,6 +3,12 @@ import { mapToList, colorFromRGB16String, RGBA } from "./worldgen";
 export const categories = {} as any;
 
 export const scenario = {
+    /**age by week */
+    abw:0.01,
+    /**research per book */
+    rpb:0.1,
+    /**research per book for focused*/
+    rpbf:1,
     popspd:0.01,
     /**POI deposit sizes */
     psz: 1000,
@@ -136,12 +142,12 @@ export const scenario = {
 1Tame Cats:.03🥄-.2🗑️.05💕0🐅
 1Pottery:-.2🗑️0🍎
 2Conservation:-.3🗑️0🍎
-0Cooking:-.1🗑️-.1🥄1🍲0🍎
-1Mapmaking:.25🔭0🏃
-2Astronomy:.25🔭0🏃
-3Compass:.25🔭0🏃
-4Optics:.25🔭0🏃
-1Research Focus:1⚗️0📙`,
+1Cooking:-.1🗑️-.1🥄.5🍲0🍎
+1Mapmaking:.2🔭0🏃
+2Astronomy:.2🔭0🏃
+3Compass:.2🔭0🏃
+4Optics:.2🔭0🏃
+1Science:1⚗️0📙`,
 
     /**animals per temperature and humidity */
     atc: "🐏,🐂,🐂,🐎,🐪,🐏,🐺,🐗,🐗,🐅",

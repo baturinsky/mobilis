@@ -12,7 +12,7 @@
     color:#c00;
   }
   .log{
-    padding: 1rem;
+    padding: 0.3rem;
   }
 
   .foc {
@@ -93,7 +93,7 @@
   .res>div{
     width: 2rem;
     text-align: center;
-    font-size: 0.8rem;
+    font-size: 0.7rem;
   }
 
   [data-rec] {
@@ -170,6 +170,9 @@
     text-shadow: 0.5px 1px#000;
     user-select: none;
     text-align: center;
+  }
+
+  .pmain{
     background: #fff8;
     box-shadow: 1px 1px #000;
     padding: 0.2rem;
@@ -180,10 +183,11 @@
     font-size: 0.7rem;
   }
 
-  .poi[data-cur='true'] {
+  .poi[data-cur='true'] .pmain {
     border: 3px solid #000;
     border-radius: 0;
     z-index: 3;
+    background: #fff;
   }
 
   *[data-use='false'] {
