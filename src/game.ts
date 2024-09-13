@@ -91,10 +91,10 @@ function generatePoi(m: LayeredMap, pois: Poi[], date?: number) {
             } else {
                 let t = m.temperature[i] * 0.8 + m.noise[i] * 5 + 12;
                 let h = m.humidity[i] * 10 + m.noise[i] * 5 - 5;
-                if (r < 0.06) {
+                if (r < 0.045) {
                     kind = scenario.atc.split(",")[(h > 0 ? 5 : 0) + ~~clamp(0, 4, t / 10)];
                 } else {
-                    kind = h < -0.5 ? (r % 0.01 < 0.003 && t > 0 ? "💧" : "🗿") : h < 0.2 ? "🌿" : "🌲,🌲,🌳,🌳,🌴".split(",")[~~clamp(0, 4, t / 15)]
+                    kind = h < -0.5 ? (r % 0.01 < 0.003 && t > 0 ? "💧" : "🗿") : h < 0.3 ? "🌿" : "🌲,🌲,🌳,🌳,🌴".split(",")[~~clamp(0, 4, t / 15)]
                 }
             }
         }
@@ -236,15 +236,17 @@ function withBonus(n: number, k: string) {
 
 export function travelToP(p: Poi) {
     delete game.store[game.deposit];
+    let from = game.home;
     game.home = p;
     game.deposit = p.kind;
     game.store[p.kind] = poiLeft(p);
-    if (game.home) {
-        let tc = travelCost(m, p, game.home)
-        advanceTimeByWeeks(tc.w)
+    if (from) {
+        let tc = travelCost(m, p, from)
+        let w = tc.w;
         delete tc.w;
         for (let k in tc)
             game.store[k] -= tc[k];
+        advanceTimeByWeeks(w)
     }
     centerMap()
 }
@@ -448,7 +450,7 @@ function processWeek() {
         if (k != game.deposit) {
             let loss = scenario.amrt
             if (k == '🍎') {
-                loss = 2 * withBonus(loss, '🗑️');
+                loss = scenario.famrt * withBonus(loss, '🗑️');
             }
             game.store[k] *= (1 - loss);
         }
@@ -536,10 +538,10 @@ function sumObj(a, b) {
 }
 
 export function travelWeight() {
-    let v = game.pop;
+    let v = game.pop * scenario.pw;
     for (let k in game.store) {
         if (game.deposit != k)
-            v += game.store[k] * 0.1;
+            v += game.store[k] * scenario.sw;
     }
     return v;
 }

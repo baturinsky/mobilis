@@ -136,6 +136,10 @@
     height: 2.1rem;
   }
 
+  .poiTip{
+    text-align: left;
+  }
+
   button {
     cursor: pointer;
     color: #ffd700;
@@ -151,16 +155,16 @@
     border-color: #fff;
   }
 
-  p {
+  pp {
     margin: -2px 0 -4px 0;
     padding: 0;
-    font-size: 0.6rem;
     text-align: left;
     color: #888;
   }
 
   .log {
     margin: 2px;
+    font-size: 0.6rem;
   }
 
   #ps {
@@ -206,6 +210,10 @@
   .poi:hover .pmain {
     background: #0448;
     box-shadow: 1px 1px #000;
+  }
+
+  .pmain{
+    pointer-events: none;
   }
 
   .poi center {
@@ -284,6 +292,7 @@
     box-shadow: 2px 2px 2px black;
     width: 260px;
     pointer-events: none;
+    font-size: 1rem;
   }
 
   #tooltip div {

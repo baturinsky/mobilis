@@ -51,7 +51,7 @@ const biomeNames = [
 ];
 
 export let settings = {
-  "seed": 7,
+  "seed": 1,
   "width": 700,
   "height": 700,
   "scale": 1,
@@ -127,7 +127,7 @@ document.onkeydown = k => {
 window.onload = init;
 
 Object.assign(window, {
-  rec: n =>{
+  rec: n => {
     tryToUse(n);
     render()
   },
@@ -145,7 +145,7 @@ Object.assign(window, {
     if (n != 0)
       if (!confirm(`Save to ${n}?`))
         return;
-    let s = JSON.stringify({ ...game, home: game.poi.indexOf(game.home as any) }, null, 2)
+    let s = JSON.stringify({ ...game, home: game.poi.indexOf(game.home as any), seed: settings.seed }, null, 2)
     localStorage.setItem("temo" + n, s)
     if (n != 0)
       report("Saved")
@@ -154,6 +154,8 @@ Object.assign(window, {
     let data = localStorage.getItem("temo" + n);
     if (data) {
       game = JSON.parse(data)
+      if (game.seed != null)
+        settings.seed = game.seed;
       game.home = game.poi[game.home as any];
       setMap(generateGameMap(game.date));
       centerMap()
@@ -218,25 +220,18 @@ function showMap(data: Float32Array | RGBA[], title: string, fun: ShowMapF, scal
   return mainCanvas;
 }
 
-function tt(k){
+function tt(k) {
   return `<span class=icon>${k}</span>`;
 }
 
 export function recipeToText(r, vertical?) {
   if (r?.fail) {
-      return "🚳"
+    return r.fail == 1 ? "🏋🏻" : "🚳"
   }
-  let txt = r ? Object.keys(r).map(k => `<span data-red='${game.store[k] < 0.1}'>${fix(r[k])}</span>${tt(k)}`).join(vertical ? "<br/>" : " ") : ""  
+  let txt = r ? Object.keys(r).map(k => `<span data-red='${game.store[k] < 0.1}'>${fix(r[k])}</span>${tt(k)}`).join(vertical ? "<br/>" : " ") : ""
   return `<span class=rtt>${txt}</span>`;
 }
 
-
-function addTooltips(text: string) {
-  for (let k in dict) {
-    text = text.replace(new RegExp(k,"g"), tt(k))
-  }
-  return text;
-}
 
 function updateTooltip(mouseAt: XY, target: HTMLElement) {
   let ind = coord2ind(mouseAt);
@@ -245,7 +240,7 @@ function updateTooltip(mouseAt: XY, target: HTMLElement) {
 
   if (target && target.classList.contains("icon") && dict[target.innerHTML]) {
     tooltip.style.display = "flex";
-    let t = (dict[target.innerHTML]||"").split("|");
+    let t = (dict[target.innerHTML] || "").split("|");
     tooltip.innerHTML = `<h4>${t[0]}</h4>${t.slice(1).join("<br/>")}`
   } else {
 
@@ -260,7 +255,18 @@ function updateTooltip(mouseAt: XY, target: HTMLElement) {
       )
       .join("");
     if (poiPointed) {
-      tooltip.innerHTML += `${poiPointed.kind} ${~~poiLeft(poiPointed)}`;
+
+
+      tooltip.style.display = "block";
+      let kind = poiPointed.kind;
+      let t = (dict[kind] || "").split("|");
+      let tc = travelCost(m, poiPointed, game.home)
+      recipeToText(tc, true)
+      let ddd = poiPointed == game.home ? "" : `<p>${recipeToText(tc, true)} ${["", "Not enough transport for everyone", "Not enough resources for entire journey", " travel duration"][tc.fail ?? 3]}</p>`;
+      tooltip.innerHTML = `
+      <h4>${kind}${t[0]}</h4><p>${t.slice(1).join("<br/>")}</p>
+      <p>Remaining:${~~poiLeft(poiPointed)}</p>${ddd}
+      `;
     }
   }
 }
@@ -279,7 +285,7 @@ document.onmousemove = (e) => {
   let isCanvas = target.tagName == "CANVAS";
   let id = target.id;
 
-  if (isCanvas || target.classList.contains("poi") || target.classList.contains('icon')) {
+  if (isCanvas || target.classList.contains('icon') || target.classList.contains('poi')) {
     //console.log(target?.dataset?.tip);
     mouseAt = [
       (e.offsetX / target.width) * settings.width / devicePixelRatio,
@@ -377,7 +383,9 @@ export function render() {
       d.style.top = `${(p.at[1] * devicePixelRatio * (2 ** zoom) + mapScroll[1] - size / 2)}px`;
       d.style.fontSize = `${size}px`
       d.dataset.cur = p == game.home;
-      d.onmouseover = () => { poiPointed = p; };
+      d.onmouseover = () => {
+        poiPointed = p;
+      };
       d.onmouseleave = () => { poiPointed = undefined; };
       d.onmousedown = () => {
         if (game.home) {
@@ -399,7 +407,7 @@ export function render() {
 
 
   let barCont = [{
-    '👨‍👩‍👦‍👦': game.pop, '💗':happiness(), '🏋': travelWeight(), '📅': currentWeek(),
+    '👨‍👩‍👦‍👦': game.pop, '💗': happiness(), '🏋': travelWeight(), '📅': currentWeek(),
     ...game.bonus
   }, {
     ...game.store
@@ -411,17 +419,17 @@ export function render() {
   }
   svs += `<button onmousedown=save(${i})>Save ${i}</button>`
 
-  
+
   let all =
-    barCont.map(bc => "<div class=res>" + Object.keys(bc).map(k => ([tt(k), bc[k] > 10 ? ~~bc[k] : fix(bc[k])])).map((a,i) =>
+    barCont.map(bc => "<div class=res>" + Object.keys(bc).map(k => ([tt(k), bc[k] > 10 ? ~~bc[k] : fix(bc[k])])).map((a, i) =>
       `<div onmousedown="give(${i})">${a.join("<br/>")}</div>`
-    ).join("") + "</div>").join("") +    
+    ).join("") + "</div>").join("") +
     Object.values(currentRecipes).map(r => {
       let to = recipeToText(r.to);
       let rg = recipeGroupStartingWith[r.name];
       let known = game.tech[r.name] > 0;
 
-      let len = (r.from?Object.keys(r.from).length:0) + (r.to?Object.keys(r.to).length:0);
+      let len = (r.from ? Object.keys(r.from).length : 0) + (r.to ? Object.keys(r.to).length : 0);
 
       let txt = (rg ? `<div>${rg}</div>` : "") +
         `<button data-sel=${game.sel[r.name]} data-rec onmousedown="rec('${r.name}')" data-use="${known && (recipeUseable(r.name) || recipes[r.name].isBonus)}" >
@@ -429,7 +437,7 @@ ${(game.bonus[`⚗️`]) ? `<div class=foc data-foc="${game.focus == r.name}" on
 ${!known ? `<div class=un>UNKNOWN</div>` : ''}
 ${`<div class=r><div>${r.name} ${game.tech[r.name] || ''}</div>
 <div>${~~(tierCost(r.name) - game.research[r.name])}<span class=resl>⚗️↩${Object.keys(r.research).join('')}</span></div></div>
-<span class=rec style="${len>4?'font-size:80%':''}">${recipeToText(r.from)}${to ? '🡢 ' + to : ''}</span>`}
+<span class=rec style="${len > 4 ? 'font-size:80%' : ''}">${recipeToText(r.from)}${to ? '🡢 ' + to : ''}</span>`}
 </button>`
       return txt
     }).join("")
@@ -437,7 +445,7 @@ ${`<div class=r><div>${r.name} ${game.tech[r.name] || ''}</div>
     + "<p class=log>" + log.slice(log.length - 20).join(" ✦ ") + "</p>"
     ;
 
-    console.log("<p class=log>" + log.slice(log.length - 20).join(" ✦ ") + "</p>");
+  console.log("<p class=log>" + log.slice(log.length - 20).join(" ✦ ") + "</p>");
   recdiv.innerHTML = all;
 }
 

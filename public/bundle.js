@@ -536,6 +536,10 @@
   // src/scenario.ts
   var categories = {};
   var scenario2 = {
+    /**pop weight */
+    pw: 0.5,
+    /**storage item  weight */
+    sw: 0.05,
     /**Local research multiplier */
     lrm: 0.1,
     /**age by week */
@@ -555,6 +559,8 @@
     rspd: 1,
     /**res wasted per week */
     amrt: 3e-3,
+    /**food waste mult*/
+    famrt: 5,
     /**research per tier */
     rcst: [100, 100, 300, 1e3, 3e3],
     /**weeks per year */
@@ -639,7 +645,7 @@
 2Plantation:3🍃>3👖
 0Hunt:1🐾>1🍎1👖!0🐾
 1Bow:3🐾1🏹>3🍎3👖!0🐾0🏹
-1Trap:2🐾2🛠️>2🍎2👖0.2🐴!0🐾0🛠️
+1Trap:2🐾2🛠️>2🍎2👖0.5🐴!0🐾0🛠️
 0Fish:1🐠>3🍎!0🐠
 1Fishing nets:1🛠️1🐠>5🍎!0🐠
 3Whaling:1⚓1🛠️1🐋>10🍎!0🐋
@@ -790,10 +796,10 @@
         } else {
           let t = m2.temperature[i] * 0.8 + m2.noise[i] * 5 + 12;
           let h = m2.humidity[i] * 10 + m2.noise[i] * 5 - 5;
-          if (r < 0.06) {
+          if (r < 0.045) {
             kind = scenario2.atc.split(",")[(h > 0 ? 5 : 0) + ~~clamp(0, 4, t / 10)];
           } else {
-            kind = h < -0.5 ? r % 0.01 < 3e-3 && t > 0 ? "💧" : "🗿" : h < 0.2 ? "🌿" : "🌲,🌲,🌳,🌳,🌴".split(",")[~~clamp(0, 4, t / 15)];
+            kind = h < -0.5 ? r % 0.01 < 3e-3 && t > 0 ? "💧" : "🗿" : h < 0.3 ? "🌿" : "🌲,🌲,🌳,🌳,🌴".split(",")[~~clamp(0, 4, t / 15)];
           }
         }
       }
@@ -911,15 +917,17 @@
   }
   function travelToP(p) {
     delete game.store[game.deposit];
+    let from = game.home;
     game.home = p;
     game.deposit = p.kind;
     game.store[p.kind] = poiLeft(p);
-    if (game.home) {
-      let tc = travelCost(m, p, game.home);
-      advanceTimeByWeeks(tc.w);
+    if (from) {
+      let tc = travelCost(m, p, from);
+      let w = tc.w;
       delete tc.w;
       for (let k in tc)
         game.store[k] -= tc[k];
+      advanceTimeByWeeks(w);
     }
     centerMap();
   }
@@ -1092,7 +1100,7 @@
       if (k != game.deposit) {
         let loss = scenario2.amrt;
         if (k == "🍎") {
-          loss = 2 * withBonus(loss, "🗑️");
+          loss = scenario2.famrt * withBonus(loss, "🗑️");
         }
         game.store[k] *= 1 - loss;
       }
@@ -1166,10 +1174,10 @@
     return Object.fromEntries(Object.keys({ ...a, ...b }).map((k) => [k, (a[k] || 0) + (b[k] || 0)]));
   }
   function travelWeight() {
-    let v = game.pop;
+    let v = game.pop * scenario2.pw;
     for (let k in game.store) {
       if (game.deposit != k)
-        v += game.store[k] * 0.1;
+        v += game.store[k] * scenario2.sw;
     }
     return v;
   }
@@ -1233,7 +1241,7 @@
     "ocean"
   ];
   var settings = {
-    "seed": 7,
+    "seed": 1,
     "width": 700,
     "height": 700,
     "scale": 1,
@@ -1317,7 +1325,7 @@
         if (!confirm(`Save to ${n}?`))
           return;
       }
-      let s = JSON.stringify({ ...game, home: game.poi.indexOf(game.home) }, null, 2);
+      let s = JSON.stringify({ ...game, home: game.poi.indexOf(game.home), seed: settings.seed }, null, 2);
       localStorage.setItem("temo" + n, s);
       if (n != 0)
         report("Saved");
@@ -1326,6 +1334,8 @@
       let data = localStorage.getItem("temo" + n);
       if (data) {
         game = JSON.parse(data);
+        if (game.seed != null)
+          settings.seed = game.seed;
         game.home = game.poi[game.home];
         setMap(generateGameMap(game.date));
         centerMap();
@@ -1355,7 +1365,7 @@
   }
   function recipeToText(r, vertical) {
     if (r?.fail) {
-      return "🚳";
+      return r.fail == 1 ? "🏋🏻" : "🚳";
     }
     let txt = r ? Object.keys(r).map((k) => `<span data-red='${game.store[k] < 0.1}'>${fix(r[k])}</span>${tt(k)}`).join(vertical ? "<br/>" : " ") : "";
     return `<span class=rtt>${txt}</span>`;
@@ -1377,7 +1387,16 @@
         }
       ).join("");
       if (poiPointed) {
-        tooltip.innerHTML += `${poiPointed.kind} ${~~poiLeft(poiPointed)}`;
+        tooltip.style.display = "block";
+        let kind = poiPointed.kind;
+        let t = (dict[kind] || "").split("|");
+        let tc = travelCost(m, poiPointed, game.home);
+        recipeToText(tc, true);
+        let ddd = poiPointed == game.home ? "" : `<p>${recipeToText(tc, true)} ${["", "Not enough transport for everyone", "Not enough resources for entire journey", " travel duration"][tc.fail ?? 3]}</p>`;
+        tooltip.innerHTML = `
+      <h4>${kind}${t[0]}</h4><p>${t.slice(1).join("<br/>")}</p>
+      <p>Remaining:${~~poiLeft(poiPointed)}</p>${ddd}
+      `;
       }
     }
   }
@@ -1392,7 +1411,7 @@
     let target = e.target;
     let isCanvas = target.tagName == "CANVAS";
     let id = target.id;
-    if (isCanvas || target.classList.contains("poi") || target.classList.contains("icon")) {
+    if (isCanvas || target.classList.contains("icon") || target.classList.contains("poi")) {
       mouseAt = [
         e.offsetX / target.width * settings.width / devicePixelRatio,
         e.offsetY / target.height * settings.height / devicePixelRatio

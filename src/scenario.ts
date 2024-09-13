@@ -3,6 +3,10 @@ import { mapToList, colorFromRGB16String, RGBA } from "./worldgen";
 export const categories = {} as any;
 
 export const scenario = {
+    /**pop weight */
+    pw:0.5,
+    /**storage item  weight */
+    sw:0.05,
     /**Local research multiplier */
     lrm: 0.1,
     /**age by week */
@@ -22,6 +26,8 @@ export const scenario = {
     rspd:1,
     /**res wasted per week */
     amrt:0.003,
+    /**food waste mult*/
+    famrt: 5,
     /**research per tier */
     rcst: [100,100,300,1000,3000],
     /**weeks per year */
@@ -112,7 +118,7 @@ export const scenario = {
 2Plantation:3🍃>3👖
 0Hunt:1🐾>1🍎1👖!0🐾
 1Bow:3🐾1🏹>3🍎3👖!0🐾0🏹
-1Trap:2🐾2🛠️>2🍎2👖0.2🐴!0🐾0🛠️
+1Trap:2🐾2🛠️>2🍎2👖0.5🐴!0🐾0🛠️
 0Fish:1🐠>3🍎!0🐠
 1Fishing nets:1🛠️1🐠>5🍎!0🐠
 3Whaling:1⚓1🛠️1🐋>10🍎!0🐋
