@@ -1,4 +1,4 @@
-import { centerMap, fix, game, generateGameMap, m, render, report, setMap, settings } from "./prog";
+import { centerMap, fix, game, generateGameMap, m, recipeToText, render, report, setMap, settings } from "./prog";
 import { categories, LAKE, OCEAN, scenario } from "./scenario";
 import { clamp, coord2ind, dist, LayeredMap, lerp, lerpXY, random, XY } from "./worldgen";
 
@@ -8,6 +8,7 @@ export type Recipe = {
     to: { [id: string]: number },
     cost: number,
     research: { [id: string]: number }
+    isBonus: boolean
 }
 
 export let dict: { [id: string]: { name: string, category: string } }, recipes: { [id: string]: Recipe }, mult = {};
@@ -29,6 +30,7 @@ export type Game = {
     date: number
     seed: number
     focus: string
+    
 };
 
 export let mapsCache: LayeredMap[] = []
@@ -42,6 +44,7 @@ export type Poi = {
     temp: number
     age: number
     ageByWeek: number
+    id: number
 }
 
 /**local recipes */
@@ -54,6 +57,7 @@ export function poiLeft(p: Poi) {
 
 function generatePoi(m: LayeredMap, pois: Poi[], date?: number) {
     let at: XY = [~~(random() * m.p.width), ~~(random() * m.p.height)];
+    let id = random();
     for (let op of pois) {
         if (dist(op.at, at) < 10) {
             return
@@ -73,10 +77,10 @@ function generatePoi(m: LayeredMap, pois: Poi[], date?: number) {
             kind = "🐋"
     } else {
         let cr = m.noise[i + 500] % 0.1;
-        let maxSpawn = (game.date%1 >= 12/13) || (game.date%13>=12)
-        if (cr < (maxSpawn?0.01:0.001)*game.date) {
+        let maxSpawn = (game.date % 1 >= 12 / 13) || (game.date % 13 >= 12)
+        if (cr < (maxSpawn ? 0.01 : 0.001) * game.date) {
             let cals = Object.keys(categories["CAL"]);
-            kind = cals[~~(random()*cals.length)];
+            kind = cals[~~(random() * cals.length)];
             isCal = true;
         } else {
             let r = m.noise[i + 1000] % 0.1;
@@ -94,8 +98,11 @@ function generatePoi(m: LayeredMap, pois: Poi[], date?: number) {
                 }
             }
         }
+        if(scenario.sm[kind]){
+            size *= scenario.sm[kind];
+        }
     }
-    let p: Poi = { at, kind, size, taken: 0, age: random(), temp: m.temperature[i], ageByWeek: (random() + 0.5) * scenario.abw * (isCal?10:1) };
+    let p: Poi = { id, at, kind, size, taken: 0, age: random(), temp: m.temperature[i], ageByWeek: (random() + 0.5) * scenario.abw * (isCal ? 10 : 1) };
     pois.push(p)
     return p
 }
@@ -150,8 +157,9 @@ function parseRecipes(s: string, short = false) {
             return a
         }).filter(v => v)
 
-        return short ? [name, from] : [name, { from, to, t: v, name, cost, research } as Recipe]
+        return short ? [name, from] : [name, { from, to, t: v, name, cost, research, isBonus: !to } as Recipe]
     }).filter(v => v)) as { [id: string]: Recipe }
+
 }
 
 export function parsePedia() {
@@ -161,29 +169,31 @@ export function parsePedia() {
             category = v.slice(1);
             categories[category] = {};
         } else {
-            let [k, name] = v.split(" ")
+            let [k, ...etc] = v.split(" ")
             categories[category][k] = 1;
-            return [k, name]
+            return [k, etc.join(' ')]
         }
     }).filter(a => a) as any);
     for (let m in scenario.m) {
         mult[m] = parseRecipes(scenario.m[m], true);
     }
 
+
     recipes = parseRecipes(scenario.rr);
-    //console.log(dict);
+    console.log(dict);
     //console.log(recipes);
     //console.log(mult);
 }
 
 
-
-//console.log(recipes, dict);
+function storeItems(){
+    return Object.keys(dict).filter(k => categories.RES[k] || categories.TLS[k])
+}
 
 export function initGame(seed: number) {
     let game = {
         pop: 100,
-        store: Object.fromEntries(Object.keys(dict).filter(k => categories.RES[k] || categories.TLS[k]).map(k => [k, 0])),
+        store: Object.fromEntries(storeItems().map(k => [k, 0])),
         bonus: Object.fromEntries(Object.keys(categories.BNS).map(k => [k, 0])),
         sel: { Walk: 1, Swim: 1 },
         '🏃': "Walk",
@@ -194,7 +204,7 @@ export function initGame(seed: number) {
         research: {}
     } as any as Game;
     game.poi = []
-    game.date = 0.99;
+    //game.date = 0.99;
     //game.bonus['⚗️'] = 1;
 
     for (let k in recipes) {
@@ -212,7 +222,7 @@ export function happiness() {
         let v = game.store[k]
         let b = v ** 0.75
         if (k == '🍎')
-            b = withBonus(h, '🍲')
+            b = 2 * withBonus(h, '🍲')
         h += b
     }
     h = withBonus(h, '💕')
@@ -226,6 +236,9 @@ function withBonus(n: number, k: string) {
 
 export function travelToP(p: Poi) {
     delete game.store[game.deposit];
+    game.home = p;
+    game.deposit = p.kind;
+    game.store[p.kind] = poiLeft(p);
     if (game.home) {
         let tc = travelCost(m, p, game.home)
         advanceTimeByWeeks(tc.w)
@@ -233,9 +246,6 @@ export function travelToP(p: Poi) {
         for (let k in tc)
             game.store[k] -= tc[k];
     }
-    game.home = p;
-    game.deposit = p.kind;
-    game.store[p.kind] = poiLeft(p);
     centerMap()
 }
 
@@ -247,6 +257,8 @@ export function populate(pois: Poi[]) {
         generatePoi(m, pois);
     }
     compactPois(m, pois)
+    if(game.home)
+        game.store[game.home.kind] = poiLeft(game.home);
     console.timeEnd("populate")
 }
 
@@ -293,9 +305,12 @@ function recipeMax(r: Recipe, goal?: number) {
 function recipeUse({ used, made }) {
     report(recipeToText(used) + "🡢" + recipeToText(made))
     for (let k in used) {
-        game.store[k] -= used[k];
+
         if (game.deposit == k && game.home) {
             game.home.taken += used[k];
+            game.store[k] = poiLeft(game.home)
+        } else {
+            game.store[k] -= used[k];
         }
     }
     for (let k in made) {
@@ -362,31 +377,33 @@ export function setCurrentRecipes() {
 const travelTypes = ["⚓", "🏃"];
 
 export function tryToUse(rname?: string) {
-    if (rname) {
-        let r = currentRecipes[rname];
-        if (!r.to) {
-            //game.sel[rname] = game.sel[rname]?undefined:1;
+    if (!rname || !game.tech[rname])
+        return
+
+    let r = currentRecipes[rname];
+
+    if (!r.to) {
+        //game.sel[rname] = game.sel[rname]?undefined:1;
+        return
+    }
+
+
+    for (let travelType of travelTypes) {
+        if (r.to[travelType]) {
+            let tt = game[travelType];
+            delete game.sel[tt];
+            game.sel[r.name] = 1
+            game[travelType] = r.name
             return
         }
+    }
 
-
-        for (let travelType of travelTypes) {
-            if (r.to[travelType]) {
-                let tt = game[travelType];
-                delete game.sel[tt];
-                game.sel[r.name] = 1
-                game[travelType] = r.name
-                return
-            }
-        }
-
-        let v = recipeMax(r)
-        if (v > 0) {
-            v = Math.min(v, game.pop);
-            let usage = recipeUsage(r, v)
-            recipeUse(usage);
-            advanceTimeByWeeks(v / game.pop);
-        }
+    let v = recipeMax(r)
+    if (v > 0) {
+        v = Math.min(v, game.pop);
+        let usage = recipeUsage(r, v)
+        recipeUse(usage);
+        advanceTimeByWeeks(v / game.pop);
     }
 }
 
@@ -423,11 +440,17 @@ function processWeek() {
     for (let k in game.store) {
         let advancing = Object.values(currentRecipes).filter(r => r.research[k]);
         let by = game.store[k] ** 0.8 / advancing.length * scenario.rspd;
+        if (k == game.deposit)
+            by *= scenario.lrm
         for (let a of advancing) {
             research(a.name, by)
         }
         if (k != game.deposit) {
-            game.store[k] *= (1 - scenario.amrt);
+            let loss = scenario.amrt
+            if (k == '🍎') {
+                loss = 2 * withBonus(loss, '🗑️');
+            }
+            game.store[k] *= (1 - loss);
         }
     }
 
@@ -444,7 +467,7 @@ function processWeek() {
 
     for (let p of [...game.poi]) {
         p.age += p.ageByWeek;
-        if ((p.age > 1 || poiLeft(p) <= 0) && game.home != p) {
+        if ((p.age > 1 || poiLeft(p) <= 0) && game.home?.id != p.id) {
             game.poi.splice(game.poi.indexOf(p), 1);
             let np: Poi | undefined;
             do {
@@ -556,11 +579,4 @@ function smartMult(n: number) {
 
 console.log("SM", smartMult(0.5));
 
-export function recipeToText(r, vertical?) {
-    if (r?.fail) {
-        return "too<br/>far"
-    }
-    let txt = r ? Object.keys(r).map(k => `<num data-red='${game.store[k] < 0.1}'>${fix(r[k])}</num>${k}`).join(vertical ? "<br/>" : " ") : ""
-    return txt;
-}
 

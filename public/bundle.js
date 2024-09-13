@@ -527,7 +527,8 @@
     let terrain = lerpMaps(a, b, n, ["dryElevation", "tectonic"]);
     console.timeEnd("blend");
     console.time("blendGen");
-    let m2 = generateMap({ ...a.p, averageTemperature: a.p.averageTemperature + Math.sin(n * 6.3) * 20 }, terrain);
+    let averageTemperature = a.p.averageTemperature + Math.sin(n * Math.PI * 2) * 20;
+    let m2 = generateMap({ ...a.p, averageTemperature }, terrain);
     console.timeEnd("blendGen");
     return m2;
   }
@@ -535,8 +536,10 @@
   // src/scenario.ts
   var categories = {};
   var scenario2 = {
+    /**Local research multiplier */
+    lrm: 0.1,
     /**age by week */
-    abw: 0.01,
+    abw: 0.02,
     /**research per book */
     rpb: 0.1,
     /**research per book for focused*/
@@ -551,7 +554,7 @@
     /**research speed */
     rspd: 1,
     /**res wasted per week */
-    amrt: 0.01,
+    amrt: 3e-3,
     /**research per tier */
     rcst: [100, 100, 300, 1e3, 3e3],
     /**weeks per year */
@@ -559,61 +562,63 @@
     /**Distance multiplier */
     dm: 0.1,
     d: `=DEP
-🏔️ ores
-⬛ coal
-🛢️ oil
-💧 water
-🗿 relic
+🏔️ Ores|Make metal of them
+⬛ Coal|Simple fuel
+🛢️ Oil|Advanced fuel
+💧 Oasis|Small patch of arable land in the desert
+🗿 Relic|Knowledge of civilization lost to Calamities
 =PLN
-🌿 grass
-🌲 taiga
-🌳 forest
-🌴 jungles
+🌿 Grasslans|Best for farming and herding
+🌲 Taiga|Place for Woodcutting and gathering
+🌳 Forest|Place for Woodcutting and gathering
+🌴 Jungles|Place for Woodcutting and gathering
 =ANM
 🐏 ram
-🐂 yak
-🐎 mustang
-🐪 camel
-🐺 wolves
-🐗 hogs
-🐅 tigers
+🐂 Yak|Can be domesticated (as cattle)
+🐎 Mustang|Can be tamed
+🐪 Camel|Can be tamed (as horses)
+🐺 Wolves|Can be tamed (as dogs)
+🐗 Hogs|Can be domesticated (as cattle)
+🐅 Tigers|Can betamed (as cats)
+🐠 Fish
+🐋 Whale
 =RES
-👖 fabric
-🪵 wood
-🍎 food
-⛽ fuel
-📙 book
+👖 Fabric|To sew things or replace sails
+🪵 Wood|The simples building materials
+🍎 Food|Meat, fish,fruits and crops
+⛽ Fuel|Coal, oil or even firewood
+📙 Book|Have them to advance research
 =TLS
-🛠️ tools
-⛺ housing
-🛷 wagons
-🐴 horses
-⚙️ engines
-🏹 weapons
+🛠️ Tools|Crafting instruments
+⛺ Housing|Things to live in
+🛷 Wagons|Can be converted to travel on land or sea
+🐴 Horses|Pull wagons
+⚙️ Engines|Can be used on wagons or machines
+🏹 Weapons|From bows to guns and armors
 =BNS
-💕 happiness bonus
-🥄 food consumption
-🔭 visibility range
-🗑️ food spoilage
-🎯 hunting bonus
-🍲 food happiness
-⚗️ research focus
+💕 Happiness bonus|Increases all happiness
+🥄 Food consumption|Change food eaten per pop
+🔭 Visibility range bonus|How much map you see (without cheating)
+🗑️ Food spoilage speed
+🍲 Food happiness|Bonus to happinsess from food reserves
+🎯 Hunting bonus|Bonus for interacting with wild animals
+⚗️ Research focus|Press ⚗️ on topic to keep researching it with 📙
 =WLD
-🐾 animals
-🍃 plants
-🌾 cropss
+🐾 Animals|Can be hunted or caught
+🍃 Plants|Can be harvested
+🌾 Crops|Result of Farming. Converted to 🍎Food
 =MOV
-🏃 walk
-⚓ swim
+🏃 Walk|Movement speed on land
+⚓ Swim|Movement speed on sea
 =CAL
-👹 goblin
-☣️ taint
-🌋 fracture
+👹 Goblin|Appear often on 13th month and on 13th year
+☣️ Taint|Appear often on 13th month and on 13th year
+🌋 Fracture|Appear often on 13th month and on 13th year
 =MSC
-💗 happiness
-📅 week
-👨‍👩‍👦‍👦 pop
-🏋 weight
+💗 Happiness|increases from having various stuff in stock, grows population
+📅 Week|1/13 of a month, 1/169 of a year
+👨‍👩‍👦‍👦 Pop|Do work, eat food
+🏋 Weight|Slows you down. Each item in store weight 1/10 of pop
 `,
     st: `Foraging;Walking;Sticks`,
     aka: { "🌾": "🍎" },
@@ -634,7 +639,7 @@
 2Plantation:3🍃>3👖
 0Hunt:1🐾>1🍎1👖!0🐾
 1Bow:3🐾1🏹>3🍎3👖!0🐾0🏹
-1Trap:2🐾1🛠️>2🍎2👖!0🐾0🛠️
+1Trap:2🐾2🛠️>2🍎2👖0.2🐴!0🐾0🛠️
 0Fish:1🐠>3🍎!0🐠
 1Fishing nets:1🛠️1🐠>5🍎!0🐠
 3Whaling:1⚓1🛠️1🐋>10🍎!0🐋
@@ -676,20 +681,27 @@
 1Science:1⚗️0📙`,
     /**animals per temperature and humidity */
     atc: "🐏,🐂,🐂,🐎,🐪,🐏,🐺,🐗,🐗,🐅",
+    /**deposit size multipliers */
+    sm: {
+      "🐏": 0.3,
+      "💧": 0.3,
+      "🗿": 0.3
+    },
     /**multipliers*/
     m: {
       "🐾": `🐏:1🍎3👖
-🐂:3🍎1👖
-🐎:2🍎1👖
-🐪:1🍎1👖
-🐺:1🍎1👖
-🐗:4🍎1👖
-🐅:1🍎2👖
+🐂:3🍎1👖0🐴
+🐎:2🍎1👖0.5🐴
+🐪:1🍎1👖0.3🐴
+🐺:1🍎1👖0🐴
+🐗:4🍎1👖0🐴
+🐅:1🍎2👖0🐴
 `,
       "🍃": `🌿:2.5🍎0.5🪵1🌾1🐴1👖
 🌲:1🍎2🪵0.3🌾0.35🐴0.3👖
 🌳:2🍎1🪵0.5🌾0.5🐴0.3👖
-🌴:1.5🍎1.5🪵0.3🌾0.3🐴0.3👖`
+🌴:1.5🍎1.5🪵0.3🌾0.3🐴0.3👖
+💧:1🍎0.3🪵0.5🌾0.5🐴1👖`
     }
   };
   var DESERT = 1;
@@ -746,6 +758,7 @@
   }
   function generatePoi(m2, pois, date) {
     let at = [~~(random() * m2.p.width), ~~(random() * m2.p.height)];
+    let id = random();
     for (let op of pois) {
       if (dist(op.at, at) < 10) {
         return;
@@ -784,8 +797,11 @@
           }
         }
       }
+      if (scenario2.sm[kind]) {
+        size *= scenario2.sm[kind];
+      }
     }
-    let p = { at, kind, size, taken: 0, age: random(), temp: m2.temperature[i], ageByWeek: (random() + 0.5) * scenario2.abw * (isCal ? 10 : 1) };
+    let p = { id, at, kind, size, taken: 0, age: random(), temp: m2.temperature[i], ageByWeek: (random() + 0.5) * scenario2.abw * (isCal ? 10 : 1) };
     pois.push(p);
     return p;
   }
@@ -833,7 +849,7 @@
         }
         return a;
       }).filter((v2) => v2);
-      return short ? [name, from] : [name, { from, to, t: v, name, cost, research: research2 }];
+      return short ? [name, from] : [name, { from, to, t: v, name, cost, research: research2, isBonus: !to }];
     }).filter((v) => v));
   }
   function parsePedia() {
@@ -843,20 +859,24 @@
         category = v.slice(1);
         categories[category] = {};
       } else {
-        let [k, name] = v.split(" ");
+        let [k, ...etc] = v.split(" ");
         categories[category][k] = 1;
-        return [k, name];
+        return [k, etc.join(" ")];
       }
     }).filter((a) => a));
     for (let m2 in scenario2.m) {
       mult[m2] = parseRecipes(scenario2.m[m2], true);
     }
     recipes = parseRecipes(scenario2.rr);
+    console.log(dict);
+  }
+  function storeItems() {
+    return Object.keys(dict).filter((k) => categories.RES[k] || categories.TLS[k]);
   }
   function initGame(seed) {
     let game2 = {
       pop: 100,
-      store: Object.fromEntries(Object.keys(dict).filter((k) => categories.RES[k] || categories.TLS[k]).map((k) => [k, 0])),
+      store: Object.fromEntries(storeItems().map((k) => [k, 0])),
       bonus: Object.fromEntries(Object.keys(categories.BNS).map((k) => [k, 0])),
       sel: { Walk: 1, Swim: 1 },
       "🏃": "Walk",
@@ -867,7 +887,6 @@
       research: {}
     };
     game2.poi = [];
-    game2.date = 0.99;
     for (let k in recipes) {
       game2.tech[k] = recipes[k].cost == 0 ? 1 : 0;
       game2.research[k] = 0;
@@ -881,7 +900,7 @@
       let v = game.store[k];
       let b = v ** 0.75;
       if (k == "🍎")
-        b = withBonus(h, "🍲");
+        b = 2 * withBonus(h, "🍲");
       h += b;
     }
     h = withBonus(h, "💕");
@@ -892,6 +911,9 @@
   }
   function travelToP(p) {
     delete game.store[game.deposit];
+    game.home = p;
+    game.deposit = p.kind;
+    game.store[p.kind] = poiLeft(p);
     if (game.home) {
       let tc = travelCost(m, p, game.home);
       advanceTimeByWeeks(tc.w);
@@ -899,9 +921,6 @@
       for (let k in tc)
         game.store[k] -= tc[k];
     }
-    game.home = p;
-    game.deposit = p.kind;
-    game.store[p.kind] = poiLeft(p);
     centerMap();
   }
   function populate(pois) {
@@ -912,6 +931,8 @@
       generatePoi(m, pois);
     }
     compactPois(m, pois);
+    if (game.home)
+      game.store[game.home.kind] = poiLeft(game.home);
     console.timeEnd("populate");
   }
   function compactPois(m2, pois) {
@@ -949,9 +970,11 @@
   function recipeUse({ used, made }) {
     report(recipeToText(used) + "🡢" + recipeToText(made));
     for (let k in used) {
-      game.store[k] -= used[k];
       if (game.deposit == k && game.home) {
         game.home.taken += used[k];
+        game.store[k] = poiLeft(game.home);
+      } else {
+        game.store[k] -= used[k];
       }
     }
     for (let k in made) {
@@ -1009,27 +1032,27 @@
   }
   var travelTypes = ["⚓", "🏃"];
   function tryToUse(rname) {
-    if (rname) {
-      let r = currentRecipes[rname];
-      if (!r.to) {
+    if (!rname || !game.tech[rname])
+      return;
+    let r = currentRecipes[rname];
+    if (!r.to) {
+      return;
+    }
+    for (let travelType of travelTypes) {
+      if (r.to[travelType]) {
+        let tt2 = game[travelType];
+        delete game.sel[tt2];
+        game.sel[r.name] = 1;
+        game[travelType] = r.name;
         return;
       }
-      for (let travelType of travelTypes) {
-        if (r.to[travelType]) {
-          let tt = game[travelType];
-          delete game.sel[tt];
-          game.sel[r.name] = 1;
-          game[travelType] = r.name;
-          return;
-        }
-      }
-      let v = recipeMax(r);
-      if (v > 0) {
-        v = Math.min(v, game.pop);
-        let usage = recipeUsage(r, v);
-        recipeUse(usage);
-        advanceTimeByWeeks(v / game.pop);
-      }
+    }
+    let v = recipeMax(r);
+    if (v > 0) {
+      v = Math.min(v, game.pop);
+      let usage = recipeUsage(r, v);
+      recipeUse(usage);
+      advanceTimeByWeeks(v / game.pop);
     }
   }
   function currentWeek() {
@@ -1061,11 +1084,17 @@
     for (let k in game.store) {
       let advancing = Object.values(currentRecipes).filter((r) => r.research[k]);
       let by = game.store[k] ** 0.8 / advancing.length * scenario2.rspd;
+      if (k == game.deposit)
+        by *= scenario2.lrm;
       for (let a of advancing) {
         research(a.name, by);
       }
       if (k != game.deposit) {
-        game.store[k] *= 1 - scenario2.amrt;
+        let loss = scenario2.amrt;
+        if (k == "🍎") {
+          loss = 2 * withBonus(loss, "🗑️");
+        }
+        game.store[k] *= 1 - loss;
       }
     }
     let bonus = game.bonus["⚗️"];
@@ -1078,7 +1107,7 @@
     }
     for (let p of [...game.poi]) {
       p.age += p.ageByWeek;
-      if ((p.age > 1 || poiLeft(p) <= 0) && game.home != p) {
+      if ((p.age > 1 || poiLeft(p) <= 0) && game.home?.id != p.id) {
         game.poi.splice(game.poi.indexOf(p), 1);
         let np;
         do {
@@ -1170,13 +1199,6 @@
     return n > 0 ? 1 + n : 1 / (1 - n);
   }
   console.log("SM", smartMult(0.5));
-  function recipeToText(r, vertical) {
-    if (r?.fail) {
-      return "too<br/>far";
-    }
-    let txt = r ? Object.keys(r).map((k) => `<num data-red='${game.store[k] < 0.1}'>${fix(r[k])}</num>${k}`).join(vertical ? "<br/>" : " ") : "";
-    return txt;
-  }
 
   // src/prog.ts
   var m;
@@ -1220,8 +1242,8 @@
     "tectonicFactor": 2.9,
     "noiseSmoothness": 1,
     "tectonicSmoothness": 8.5,
-    "pangaea": -1.5,
-    "seaRatio": 0.47,
+    "pangaea": 0,
+    "seaRatio": 0.55,
     "flatness": 0.09,
     "randomiseHumidity": 0,
     "averageTemperature": 19,
@@ -1249,14 +1271,39 @@
     renderMap();
     render();
   }
-  document.addEventListener("mousedown", (e) => {
-    tryToUse(e.target.dataset.rec);
-    render();
-  });
+  document.onkeydown = (k) => {
+    function adv() {
+      game.date += 1 / 13;
+      setMap(generateGameMap(game.date));
+      return new Promise((r) => setTimeout(r, 50));
+    }
+    if (k.shiftKey) {
+      if (k.code == "KeyW") {
+        game.poi = [];
+        mapScroll[0] = 0;
+        mapScroll[1] = 0;
+        zoom = 0;
+      }
+      if (k.code == "KeyS") {
+        adv();
+      }
+      if (k.code == "KeyA") {
+        let loop = async () => {
+          adv().then(loop);
+        };
+        loop();
+      }
+      renderMap();
+    }
+  };
   window.onload = init;
   Object.assign(window, {
-    give: (a) => {
-      game.store[a] += 100;
+    rec: (n) => {
+      tryToUse(n);
+      render();
+    },
+    give: (i) => {
+      game.store[Object.keys(game.store)[i]] += 100;
       render();
     },
     foc: (a) => {
@@ -1282,6 +1329,7 @@
         game.home = game.poi[game.home];
         setMap(generateGameMap(game.date));
         centerMap();
+        render();
         report("Loaded");
       }
     }
@@ -1302,24 +1350,40 @@
     mainCanvas = mainCanvas;
     return mainCanvas;
   }
-  function updateTooltip(mouseAt2) {
+  function tt(k) {
+    return `<span class=icon>${k}</span>`;
+  }
+  function recipeToText(r, vertical) {
+    if (r?.fail) {
+      return "🚳";
+    }
+    let txt = r ? Object.keys(r).map((k) => `<span data-red='${game.store[k] < 0.1}'>${fix(r[k])}</span>${tt(k)}`).join(vertical ? "<br/>" : " ") : "";
+    return `<span class=rtt>${txt}</span>`;
+  }
+  function updateTooltip(mouseAt2, target) {
     let ind = coord2ind(mouseAt2);
     tooltip.style.left = `${Math.min(window.innerWidth - 300, screenXY[0] + 20)}`;
-    tooltip.style.top = `${Math.min(window.innerHeight - 300, screenXY[1] - 40)}`;
-    tooltip.style.display = "grid";
-    tooltip.innerHTML = Object.keys(m).map(
-      (key) => {
-        let v = m[key][ind];
-        return `<div>${key}</div><div>${key == "photo" ? v?.map((n) => ~~n) : key == "biome" ? v + " " + biomeNames[v]?.toUpperCase() : ~~(v * 1e6) / 1e6}</div>`;
+    tooltip.style.top = `${Math.min(window.innerHeight - 300, screenXY[1] + 20)}`;
+    if (target && target.classList.contains("icon") && dict[target.innerHTML]) {
+      tooltip.style.display = "flex";
+      let t = (dict[target.innerHTML] || "").split("|");
+      tooltip.innerHTML = `<h4>${t[0]}</h4>${t.slice(1).join("<br/>")}`;
+    } else {
+      tooltip.style.display = "grid";
+      tooltip.innerHTML = Object.keys(m).map(
+        (key) => {
+          let v = m[key][ind];
+          return `<div>${key}</div><div>${key == "photo" ? v?.map((n) => ~~n) : key == "biome" ? v + " " + biomeNames[v]?.toUpperCase() : ~~(v * 1e6) / 1e6}</div>`;
+        }
+      ).join("");
+      if (poiPointed) {
+        tooltip.innerHTML += `${poiPointed.kind} ${~~poiLeft(poiPointed)}`;
       }
-    ).join("");
-    if (poiPointed) {
-      tooltip.innerHTML += `${poiPointed.kind} ${~~poiLeft(poiPointed)}`;
     }
   }
   document.onmousemove = (e) => {
     let move = [e.movementX, e.movementY];
-    screenXY = [e.screenX, e.screenY];
+    screenXY = [e.pageX, e.pageY];
     if (e.target == mainCanvas && e.buttons) {
       mapScroll[0] += move[0] * devicePixelRatio;
       mapScroll[1] += move[1] * devicePixelRatio;
@@ -1328,12 +1392,12 @@
     let target = e.target;
     let isCanvas = target.tagName == "CANVAS";
     let id = target.id;
-    if (isCanvas || target.classList.contains("poi")) {
+    if (isCanvas || target.classList.contains("poi") || target.classList.contains("icon")) {
       mouseAt = [
         e.offsetX / target.width * settings.width / devicePixelRatio,
         e.offsetY / target.height * settings.height / devicePixelRatio
       ];
-      updateTooltip(mouseAt);
+      updateTooltip(mouseAt, e.target);
     } else if (tips[id]) {
       tooltip.innerHTML = tips[id];
     } else {
@@ -1354,10 +1418,9 @@
   };
   function poiText(i) {
     let p = game.poi[i];
-    let ts = travelSteps(m, p, game.home);
     let tc = travelCost(m, p, game.home);
     return `<div class=poi id=poi${i}>
-<div class=pmain>${p.kind}<center style=color:rgb(${15 * p.temp - 400},50,${-20 * p.temp + 100})>${~~poiLeft(p)}
+<div class=pmain>${p.kind}<center>${~~poiLeft(p)}
 </center></div>
 <center style=margin:0.2rem >${!game.home || p == game.home ? "" : recipeToText(tc, true)}<center>
 </div>`;
@@ -1423,9 +1486,9 @@
       }
     }
     setCurrentRecipes();
-    game.bonus["💗"] = happiness();
     let barCont = [{
       "👨‍👩‍👦‍👦": game.pop,
+      "💗": happiness(),
       "🏋": travelWeight(),
       "📅": currentWeek(),
       ...game.bonus
@@ -1437,20 +1500,24 @@
       svs += `<button onmousedown=save(${i})>Save ${i}</button><button onmousedown=load(${i})>Load ${i}</button>`;
     }
     svs += `<button onmousedown=save(${i})>Save ${i}</button>`;
-    recdiv.innerHTML = barCont.map((bc) => "<div class=res>" + Object.keys(bc).map((k) => [k, bc[k] > 10 ? ~~bc[k] : fix(bc[k])]).map(
-      (a) => `<div onmousedown="give('${a[0]}')">${a.join("<br/>")}</div>`
+    let all = barCont.map((bc) => "<div class=res>" + Object.keys(bc).map((k) => [tt(k), bc[k] > 10 ? ~~bc[k] : fix(bc[k])]).map(
+      (a, i2) => `<div onmousedown="give(${i2})">${a.join("<br/>")}</div>`
     ).join("") + "</div>").join("") + Object.values(currentRecipes).map((r) => {
       let to = recipeToText(r.to);
       let rg = recipeGroupStartingWith[r.name];
       let known = game.tech[r.name] > 0;
-      return (rg ? `<div>${rg}</div>` : "") + `<button data-sel=${game.sel[r.name]} data-rec="${r.name}" data-use="${known && recipeUseable(r.name)}" >
+      let len = (r.from ? Object.keys(r.from).length : 0) + (r.to ? Object.keys(r.to).length : 0);
+      let txt = (rg ? `<div>${rg}</div>` : "") + `<button data-sel=${game.sel[r.name]} data-rec onmousedown="rec('${r.name}')" data-use="${known && (recipeUseable(r.name) || recipes[r.name].isBonus)}" >
 ${game.bonus[`⚗️`] ? `<div class=foc data-foc="${game.focus == r.name}" onmousedown=foc('${r.name}')>⚗️</div>` : ""}
 ${!known ? `<div class=un>UNKNOWN</div>` : ""}
 ${`<div class=r><div>${r.name} ${game.tech[r.name] || ""}</div>
 <div>${~~(tierCost(r.name) - game.research[r.name])}<span class=resl>⚗️↩${Object.keys(r.research).join("")}</span></div></div>
-<span class=rec>${recipeToText(r.from)}${to ? "🡢 " + to : ""}</span>`}
+<span class=rec style="${len > 4 ? "font-size:80%" : ""}">${recipeToText(r.from)}${to ? "🡢 " + to : ""}</span>`}
 </button>`;
-    }).join("") + "<br/>" + svs + `<button data-fls=${game?.date == 0 && hasAuto} onmousedown=load(0)>Load autosave</button><p class=log>` + log.slice(log.length - 40).join(" ✦ ") + "</p>";
+      return txt;
+    }).join("") + "<br/>" + svs + `<button data-fls=${game?.date == 0 && hasAuto} onmousedown=load(0)>Load autosave</button><p class=log>` + log.slice(log.length - 20).join(" ✦ ") + "</p>";
+    console.log("<p class=log>" + log.slice(log.length - 20).join(" ✦ ") + "</p>");
+    recdiv.innerHTML = all;
   }
   var hasAuto = !!localStorage.getItem("temo0");
   function setMap(nm) {

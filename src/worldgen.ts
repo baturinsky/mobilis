@@ -274,6 +274,7 @@ export function generateTerrain(params: MapParams) {
 }
 
 export function generateMap(params: MapParams, terrain?: Terrain): LayeredMap {
+    //console.log("====at", params.averageTemperature);
     console.time("generateMap");
     terrain ??= generateTerrain(params);
     let lm = generateAtmosphere(params, terrain);
@@ -744,12 +745,15 @@ export function blendFull(a: LayeredMap, b: LayeredMap, n: number) {
     let terrain = lerpMaps(a, b, n, ["dryElevation", "tectonic"]) as Terrain;
     console.timeEnd("blend");
     console.time("blendGen");
-    let m = generateMap({ ...a.p, averageTemperature: a.p.averageTemperature + Math.sin(n * 6.3) * 20 }, terrain);
+    let averageTemperature = a.p.averageTemperature + Math.sin(n * Math.PI*2) * 20;
+    //console.log({averageTemperature, n});
+    let m = generateMap({ ...a.p, averageTemperature }, terrain);
     console.timeEnd("blendGen");
     return m;
 }
 
-export function blendFast(a: LayeredMap, b: LayeredMap, n: number) {
+
+function blendFast(a: LayeredMap, b: LayeredMap, n: number) {
     console.time("blend");
     let blend = lerpMaps(a, b, n, ["elevation", "temperature", "humidity", "tectonic", "noise"]) as Terrain;
     let m = { ...a, ...blend };

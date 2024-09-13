@@ -1,6 +1,6 @@
 "use strict";
 
-import { initGame, mult, Poi, poiLeft, Recipe, recipes, Game, parsePedia, populate, travelToP, setCurrentRecipes, tryToUse, travelSteps, travelCost, travelWeight, recipeUseable, happiness, recipeGroupStartingWith, advanceTimeByWeeks, currentWeek, currentRecipes, tierCost, mapsCache, recipeToText, updateBonuses } from "./game";
+import { initGame, mult, Poi, poiLeft, Recipe, recipes, Game, parsePedia, populate, travelToP, setCurrentRecipes, tryToUse, travelSteps, travelCost, travelWeight, recipeUseable, happiness, recipeGroupStartingWith, advanceTimeByWeeks, currentWeek, currentRecipes, tierCost, mapsCache, updateBonuses, dict } from "./game";
 import { categories, scenario } from "./scenario";
 import {
   data2image, rescaleImage, generateMap, ShowMapF, LayeredMap, RGBA,
@@ -60,8 +60,8 @@ export let settings = {
   "tectonicFactor": 2.9,
   "noiseSmoothness": 1,
   "tectonicSmoothness": 8.5,
-  "pangaea": -1.5,
-  "seaRatio": 0.47,
+  "pangaea": 0,
+  "seaRatio": 0.55,
   "flatness": 0.09,
   "randomiseHumidity": 0,
   "averageTemperature": 19,
@@ -92,18 +92,47 @@ function init() {
   render();
 }
 
-document.addEventListener("mousedown", e => {
+/*document.addEventListener("mousedown", e => {
   tryToUse((e.target as HTMLButtonElement).dataset.rec);
   render();
-});
+});*/
 
 
+document.onkeydown = k => {
+  function adv() {
+    game.date += 1 / 13;
+    setMap(generateGameMap(game.date));
+    return new Promise(r => setTimeout(r, 50))
+  }
+
+  if (k.shiftKey) {
+    if (k.code == "KeyW") {
+      game.poi = [];
+      mapScroll[0] = 0;
+      mapScroll[1] = 0;
+      zoom = 0;
+    }
+    if (k.code == "KeyS") {
+      adv()
+    }
+    if (k.code == "KeyA") {
+      let loop = async () => { adv().then(loop) }
+      loop();
+    }
+
+    renderMap();
+  }
+}
 
 window.onload = init;
 
 Object.assign(window, {
-  give: a => { 
-    game.store[a] += 100;
+  rec: n =>{
+    tryToUse(n);
+    render()
+  },
+  give: i => {
+    game.store[Object.keys(game.store)[i]] += 100;
     render()
   },
   foc: a => {
@@ -128,6 +157,7 @@ Object.assign(window, {
       game.home = game.poi[game.home as any];
       setMap(generateGameMap(game.date));
       centerMap()
+      render()
       report("Loaded")
     }
   },
@@ -188,31 +218,57 @@ function showMap(data: Float32Array | RGBA[], title: string, fun: ShowMapF, scal
   return mainCanvas;
 }
 
+function tt(k){
+  return `<span class=icon>${k}</span>`;
+}
+
+export function recipeToText(r, vertical?) {
+  if (r?.fail) {
+      return "🚳"
+  }
+  let txt = r ? Object.keys(r).map(k => `<span data-red='${game.store[k] < 0.1}'>${fix(r[k])}</span>${tt(k)}`).join(vertical ? "<br/>" : " ") : ""  
+  return `<span class=rtt>${txt}</span>`;
+}
 
 
-function updateTooltip(mouseAt: XY) {
+function addTooltips(text: string) {
+  for (let k in dict) {
+    text = text.replace(new RegExp(k,"g"), tt(k))
+  }
+  return text;
+}
+
+function updateTooltip(mouseAt: XY, target: HTMLElement) {
   let ind = coord2ind(mouseAt);
   tooltip.style.left = `${Math.min(window.innerWidth - 300, screenXY[0] + 20)}`;
-  tooltip.style.top = `${Math.min(window.innerHeight - 300, screenXY[1] - 40)}`;
-  tooltip.style.display = "grid";
-  tooltip.innerHTML = Object.keys(m)
-    .map((key) => {
-      let v = m[key][ind];
-      return `<div>${key}</div><div>${key == "photo" ? v?.map(n => ~~n) :
-        key == "biome" ? v + " " + biomeNames[v]?.toUpperCase() :
-          ~~(v * 1e6) / 1e6}</div>`
+  tooltip.style.top = `${Math.min(window.innerHeight - 300, screenXY[1] + 20)}`;
+
+  if (target && target.classList.contains("icon") && dict[target.innerHTML]) {
+    tooltip.style.display = "flex";
+    let t = (dict[target.innerHTML]||"").split("|");
+    tooltip.innerHTML = `<h4>${t[0]}</h4>${t.slice(1).join("<br/>")}`
+  } else {
+
+    tooltip.style.display = "grid";
+    tooltip.innerHTML = Object.keys(m)
+      .map((key) => {
+        let v = m[key][ind];
+        return `<div>${key}</div><div>${key == "photo" ? v?.map(n => ~~n) :
+          key == "biome" ? v + " " + biomeNames[v]?.toUpperCase() :
+            ~~(v * 1e6) / 1e6}</div>`
+      }
+      )
+      .join("");
+    if (poiPointed) {
+      tooltip.innerHTML += `${poiPointed.kind} ${~~poiLeft(poiPointed)}`;
     }
-    )
-    .join("");
-  if (poiPointed) {
-    tooltip.innerHTML += `${poiPointed.kind} ${~~poiLeft(poiPointed)}`;
   }
 }
 
 document.onmousemove = (e) => {
 
   let move = [e.movementX, e.movementY]
-  screenXY = [e.screenX, e.screenY];
+  screenXY = [e.pageX, e.pageY];
   if (e.target == mainCanvas && e.buttons) {
     mapScroll[0] += move[0] * devicePixelRatio
     mapScroll[1] += move[1] * devicePixelRatio
@@ -223,12 +279,13 @@ document.onmousemove = (e) => {
   let isCanvas = target.tagName == "CANVAS";
   let id = target.id;
 
-  if (isCanvas || target.classList.contains("poi")) {
+  if (isCanvas || target.classList.contains("poi") || target.classList.contains('icon')) {
+    //console.log(target?.dataset?.tip);
     mouseAt = [
       (e.offsetX / target.width) * settings.width / devicePixelRatio,
       (e.offsetY / target.height) * settings.height / devicePixelRatio
     ];
-    updateTooltip(mouseAt)
+    updateTooltip(mouseAt, e.target as HTMLElement)
   } else if (tips[id]) {
     tooltip.innerHTML = tips[id];
   } else {
@@ -255,10 +312,11 @@ main.onwheel = (e) => {
 
 function poiText(i: number) {
   let p = game.poi[i];
-  let ts = travelSteps(m, p, game.home)
+  //let ts = travelSteps(m, p, game.home)
   let tc = travelCost(m, p, game.home)
+  //let style = `style=color:rgb(${15 * p.temp - 400},50,${-20 * p.temp + 100})`;
   return `<div class=poi id=poi${i}>
-<div class=pmain>${p.kind}<center style=color:rgb(${15 * p.temp - 400},50,${-20 * p.temp + 100})>${~~poiLeft(p)}
+<div class=pmain>${p.kind}<center>${~~poiLeft(p)}
 </center></div>
 <center style=margin:0.2rem >${!game.home || p == game.home ? "" : recipeToText(tc, true)}<center>
 </div>`
@@ -284,7 +342,7 @@ export function fix(n) {
   return parseFloat(Number(n).toFixed(2))
 }
 
-export function centerMap(){
+export function centerMap() {
   let half = settings.width / 2;
   if (game.home) {
     zoom = 2.25 / (1 + game.bonus['🔭']);
@@ -337,11 +395,11 @@ export function render() {
   }
 
   setCurrentRecipes()
-  game.bonus["💗"] = happiness();
+  //game.bonus["💗"] = happiness();
 
 
   let barCont = [{
-    '👨‍👩‍👦‍👦': game.pop, '🏋': travelWeight(), '📅': currentWeek(),
+    '👨‍👩‍👦‍👦': game.pop, '💗':happiness(), '🏋': travelWeight(), '📅': currentWeek(),
     ...game.bonus
   }, {
     ...game.store
@@ -353,39 +411,38 @@ export function render() {
   }
   svs += `<button onmousedown=save(${i})>Save ${i}</button>`
 
-  recdiv.innerHTML =
-    barCont.map(bc => "<div class=res>" + Object.keys(bc).map(k => ([k, bc[k]>10?~~bc[k]:fix(bc[k])])).map(a =>
-      `<div onmousedown="give('${a[0]}')">${a.join("<br/>")}</div>`
-    ).join("") + "</div>").join("") +
+  
+  let all =
+    barCont.map(bc => "<div class=res>" + Object.keys(bc).map(k => ([tt(k), bc[k] > 10 ? ~~bc[k] : fix(bc[k])])).map((a,i) =>
+      `<div onmousedown="give(${i})">${a.join("<br/>")}</div>`
+    ).join("") + "</div>").join("") +    
     Object.values(currentRecipes).map(r => {
       let to = recipeToText(r.to);
       let rg = recipeGroupStartingWith[r.name];
       let known = game.tech[r.name] > 0;
-      return (rg ? `<div>${rg}</div>` : "") +
-        `<button data-sel=${game.sel[r.name]} data-rec="${r.name}" data-use="${known && recipeUseable(r.name)}" >
+
+      let len = (r.from?Object.keys(r.from).length:0) + (r.to?Object.keys(r.to).length:0);
+
+      let txt = (rg ? `<div>${rg}</div>` : "") +
+        `<button data-sel=${game.sel[r.name]} data-rec onmousedown="rec('${r.name}')" data-use="${known && (recipeUseable(r.name) || recipes[r.name].isBonus)}" >
 ${(game.bonus[`⚗️`]) ? `<div class=foc data-foc="${game.focus == r.name}" onmousedown=foc('${r.name}')>⚗️</div>` : ''}
 ${!known ? `<div class=un>UNKNOWN</div>` : ''}
 ${`<div class=r><div>${r.name} ${game.tech[r.name] || ''}</div>
 <div>${~~(tierCost(r.name) - game.research[r.name])}<span class=resl>⚗️↩${Object.keys(r.research).join('')}</span></div></div>
-<span class=rec>${recipeToText(r.from)}${to ? '🡢 ' + to : ''}</span>`}
-</button>`}).join("")
+<span class=rec style="${len>4?'font-size:80%':''}">${recipeToText(r.from)}${to ? '🡢 ' + to : ''}</span>`}
+</button>`
+      return txt
+    }).join("")
     + "<br/>" + svs + `<button data-fls=${game?.date == 0 && hasAuto} onmousedown=load(0)>Load autosave</button>`
-    + "<p class=log>" + log.slice(log.length - 40).join(" ✦ ") + "</p>"
+    + "<p class=log>" + log.slice(log.length - 20).join(" ✦ ") + "</p>"
     ;
+
+    console.log("<p class=log>" + log.slice(log.length - 20).join(" ✦ ") + "</p>");
+  recdiv.innerHTML = all;
 }
 
 let hasAuto = !!localStorage.getItem("temo0")
 
-
-function generate(params) {
-  console.time("generation total");
-  m = generateMap(params);
-  mapList.push(m);
-
-  renderMap();
-
-  console.timeEnd("generation total");
-}
 
 export function setMap(nm: LayeredMap) {
   m = nm;
@@ -412,3 +469,37 @@ export function generateGameMap(date: number = game.date) {
   return blend;
 }
 
+const guide = `
+== GUIDE ==
+
+Use recipe buttons on the right to gather and craft resources. 
+You can use both your own resources and resources in the location your are in.
+Recipes with 🐾 and 🍃can work differently  with different resources.
+Use map on the left to travel between locations. Each location has a stock of one type resources to use in recipes.
+
+You can choose the method of movement on land and sea (two top rows of the buttons). 
+Default ones are free except the time, other costs fuel and needs transport. 
+You should have enough transport for each pop, and enough fuel to reach the destination.
+
+"Tool" type resources (🛠️ tools,⛺ housing,🛷 wagons,🐴 horses,⚙️ engines and 🏹 weapons)
+are expended only at 10% of listed at recipe rate (for amortization). 
+But you need to have enough of them for each pop to work at 100% effect.
+
+This planet is always in motion, resources apear and disappear. 
+Except for "Calamities" - 👹 goblin, ☣️ taint and🌋 fracture are semipermanent and you will need to remove them,
+or there will be no place for other resources on the map.
+
+Most of the actions are locked until researched. 
+You gradually research them by just having resources shown in top right of the button in store (or in location).
+Having 📙 resource advances all research, bust especially the one with Research Focus ⚗️ selected.
+Recipes can be researched past the unlocking, granting production bonuses.
+
+Food 🍎 is used at rate of one per pop. If you don't have enough, you will lose pop fast.
+
+Each resources in stock increases pop 💗 happiness. Bigger happiness lead to increase of the population.
+
+Each resource have weight which increases transportation cost and time. 
+1% of resources are used up each week. 
+`
+
+//console.log(guide);

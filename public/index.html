@@ -1,19 +1,38 @@
 <meta charset="utf-8">
 <style>
-  body{
+  body {
     background: #024;
-    background-image: 
-    repeating-conic-gradient( #0000 0deg, #fff4 0.1deg, #0000 0.2deg, #0000 0.5deg, #fff4 0.51deg, #0000 0.52deg, #0000 10deg),
-    repeating-radial-gradient( #0000 0px, #fff4 1px, #024 2px, #0000 100px)
-    
+    background-image:
+      repeating-conic-gradient( from 3.3deg, #0000 0deg, #fff4 0.1deg, #0000 0.2deg, #0000 .4deg, #fff8 .42deg, #0000 .44deg, #0000 10deg),
+      repeating-radial-gradient(circle at center, #0000 0px, #fff4 1px, #024 2px, #0000 100px);
+    cursor: default;
   }
 
-  red{
-    color:#c00;
+  h4{
+    font-size: 1rem;
+    margin: 0rem;
+    margin-bottom: 0.2rem;
+    font-weight:900;
   }
-  .log{
-    padding: 0.3rem;
+
+  .icon{
+    display: inline;
+    filter: sepia(0.4);
   }
+
+  .all {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    -ms-transform: translateX(-50%) translateY(-50%);
+    -webkit-transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%);
+  }
+
+  red {
+    color: #c00;
+  }
+
 
   .foc {
     position: absolute;
@@ -22,7 +41,6 @@
     border-radius: 0.5rem;
     background: #579;
     font-size: 0.8rem;
-    pointer-events: all;
     z-index: 4;
     box-shadow: 1px 1px #000;
   }
@@ -36,7 +54,7 @@
   }
 
   [data-red="true"] {
-    color: #c00;
+    color: #c40;
   }
 
   [data-fls="true"] {
@@ -44,21 +62,32 @@
   }
 
   @keyframes blinker {
-  50% {
-    background: #8ff;
+    50% {
+      background: #8ff;
+    }
   }
-}
 
+  .rtt .icon{
+    margin-left:-2px;
+    margin-right:-4px;
+  }
 
+  .rec{
+    display: inline-block;
+    height: 1.1rem;
+    width: 100%;
+    overflow-y: hidden;    
+  }
 
   .un {
     text-align: center;
     font-size: 1.5rem;
-    color: #fff2;
+    color: #fff3;
     width: 10rem;
     height: 2rem;
     margin-bottom: -2rem;
   }
+
 
   .r {
     display: flex;
@@ -70,19 +99,20 @@
   }
 
   * {
-    font-family: Verdana;
+    font-family: Georgia;
   }
 
   #recdiv {
     width: 30rem;
     padding: 0.2rem;
-    border: solid 1px #000;
     border-radius: 0 0.5rem 0.5rem 0;
     background: #246;
-    color: #fff;
+    color: #ffd700;
+    padding-left: 0.2rem;
+    box-shadow: 1px 1px 1px #000;
   }
 
-  .resl{
+  .resl {
     letter-spacing: -5px;
   }
 
@@ -90,31 +120,31 @@
     display: flex;
     flex-direction: row;
   }
-  .res>div{
+
+  .res>div {
     width: 2rem;
     text-align: center;
     font-size: 0.7rem;
   }
 
   [data-rec] {
+    display: inline-block;
     position: relative;
     cursor: pointer;
     width: 10rem;
-    letter-spacing: -1px;
     padding: 1px;
     height: 2.1rem;
   }
 
-  button{
+  button {
     cursor: pointer;
-    color: #fff;
+    color: #ffd700;
     background: #357;
     border: #fff4 solid 1px;
   }
 
 
   button * {
-    pointer-events: none;
   }
 
   button:hover {
@@ -129,10 +159,8 @@
     color: #888;
   }
 
-  span {
+  .log {
     margin: 2px;
-    letter-spacing: -2px;
-    text-align: center;
   }
 
   #ps {
@@ -149,7 +177,6 @@
   center {
     font-size: 50%;
     margin-top: -0.2rem;
-    pointer-events: none;
   }
 
   input {
@@ -161,8 +188,11 @@
   #main {
     overflow: hidden;
     position: relative;
-    border: solid 1px #000;
+    border: solid 1px #022;
+    box-shadow: 1px 1px 1px #000;
+    background: #0224;
   }
+
 
   .poi {
     position: absolute;
@@ -170,17 +200,16 @@
     text-shadow: 0.5px 1px#000;
     user-select: none;
     text-align: center;
+    color: #fff;
   }
 
-  .pmain{
-    background: #fff8;
+  .poi:hover .pmain {
+    background: #0448;
     box-shadow: 1px 1px #000;
-    padding: 0.2rem;
-    border-radius: 0.5rem 0;
   }
 
-  .poi center{
-    font-size: 0.7rem;
+  .poi center {
+    font-size: 0.8rem;
   }
 
   .poi[data-cur='true'] .pmain {
@@ -188,14 +217,12 @@
     border-radius: 0;
     z-index: 3;
     background: #fff;
+    color: #000;
+    padding: 0.2rem;
   }
 
   *[data-use='false'] {
     background: #024;
-  }
-
-  *[data-sel='true'] {
-    background: #68a;
   }
 
 
@@ -248,6 +275,7 @@
 
   #tooltip {
     position: fixed;
+    flex-direction: column;
     z-index: 2;
     display: none;
     grid-template-columns: 0fr 1fr;
@@ -269,15 +297,17 @@
   .tilesheet {
     display: none;
   }
+
+  *[data-sel='1'] {
+    background: #686;
+  }
+
 </style>
 
 <body>
   <div class="all">
-    <div>
-      <div id="main">
-        <div id="ps"></div>
-      </div>
-      <div id="miniMaps"></div>
+    <div id="main">
+      <div id="ps"></div>
     </div>
     <div id="recdiv">
     </div>
